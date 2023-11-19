@@ -4,7 +4,7 @@
             40,
             60
         ],
-        "long_break_chance": 0.05,
+        "long_break_chance": 0.01,
         "long_break_duration": [
             100,
             1000
@@ -13,7 +13,7 @@
             1,
             5
         ],
-        "is_headless": "True"
+        "is_headless": "False"
     },
     {
         "move": "//span[text()='{text}']/preceding-sibling::*",

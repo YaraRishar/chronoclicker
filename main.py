@@ -1,11 +1,12 @@
 from selenium import webdriver
 from selenium_stealth import stealth
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, MoveTargetOutOfBoundsException
 from selenium.webdriver.common.action_chains import ActionChains
 import time
 import random
 import json
+import re
 
 
 def check_time() -> int:
@@ -17,28 +18,31 @@ def check_time() -> int:
         element = driver.find_element(By.XPATH, xpath_string)
     except NoSuchElementException:
         return 1
-    seconds = eval((element.text.replace(' мин ', '*60+')).replace(' с', ''))
+    match_seconds = re.match(r"(\d*) мин (\d*) с", element.text)
+    if not match_seconds:
+        match_seconds = re.match(r"(\d*) с", element.text)
+        seconds = int(match_seconds[1])
+    else:
+        seconds = int(match_seconds[1]) * 60 + int(match_seconds[2])
     return seconds
 
 
-def locator(text: str, elem_type: str, offset_range=(40, 60), do_click=True, get_text=False) -> str:
-    """Найти элемент на странице по xpath. Возвращает true/false в зависимости от того, было ли выполнено действие."""
-
-    xpath_string = xpath_dict[elem_type].format(text=text)
+def locate(text: str, xpath_key: str):
+    xpath_val = xpath_dict[xpath_key].format(text=text)
     try:
-        element = driver.find_element(By.XPATH, xpath_string)
-    except NoSuchElementException:
+        element = driver.find_element(By.XPATH, xpath_val)
+        return element
+    except (NoSuchElementException, MoveTargetOutOfBoundsException):
         print(f"Элемент {text} не найден.")
         return ""
-    if do_click:
-        return clicker(element, offset_range=offset_range)
-    if get_text:
-        return element.text
 
 
-def clicker(element, offset_range=(40, 60)) -> str:
+def click(text, xpath_key, offset_range=(45, 45)):
     """Кликает по элементу element с оффсетом offset_range"""
 
+    element = locate(text, xpath_key)
+    if not element:
+        return False
     random_offset = (random.randint(-offset_range[0], offset_range[0]),
                      random.randint(-offset_range[1], offset_range[1]))
     action_chain = ActionChains(driver)
@@ -51,18 +55,18 @@ def clicker(element, offset_range=(40, 60)) -> str:
     time.sleep(random.uniform(0, 0.5))
     action_chain.release().perform()
     time.sleep(random.uniform(0.1, 0.5))
-    return "+1"
+    return True
 
 
 def action(alt_comm="", args=""):
     if alt_comm == "--endless" or alt_comm == "-e":
         while True:
             for i in range(len(args)):
-                locator(action_dict.get(args[i]), "action", (30, 30))
+                locate(action_dict.get(args[i]), "action")
                 time.sleep(check_time() + random.uniform(1, 5))
     else:
         for i in range(len(args)):
-            success = locator(action_dict.get(args[i]), "action", (30, 30))
+            success = locate(action_dict.get(args[i]), "action")
             if success:
                 time.sleep(check_time() + random.uniform(1, 5))
             else:
@@ -73,60 +77,65 @@ def action(alt_comm="", args=""):
                     print("Действие не может быть выполнено.")
 
 
-def move(alt_comm="", args=""):
-    """Команда перехода. Если присутствует модификатор --endless или -e, то маршрут повторяется
-    бесконечно (для маршрута из 3 локаций: 1 - 2 - 3 - 2 - 1 - 2 и так далее)."""
+def patrol(args=""):
+    """Команда перехода, маршрут повторяется бесконечно
+    (для маршрута из 3 локаций: 1 - 2 - 3 - 2 - 1 - 2 и так далее)."""
 
     if not args:
-        print('Для перехода нужны аргументы. Наберите help move для вывода дополнительной информации.')
-        return
-    if not alt_comm:
-        for loc in args:
-            locator(loc, "move")
-            time.sleep(check_time() + random.uniform(1, 5))
-    elif alt_comm == "--endless" or "-e":
-        index = -1
-        direction = 1
-        while True:
-            index += direction
-            if index == len(args) and direction == 1:
-                index -= 2
-                direction = -1
-            elif index == -1 and direction == -1:
-                index += 2
-                direction = 1
-            success = locator(args[index], "move")
-            if success:
-                if random.random() < settings["long_break_chance"]:
-                    seconds = check_time() + random.uniform(100, 1000)
-                    time.sleep(seconds)
-                else:
-                    seconds = check_time() + random.uniform(3, 20)
-                    time.sleep(seconds)
+        print("Для перехода нужны аргументы. Наберите help move для вывода дополнительной информации.")
+    index, direction = get_next_index(len(args))
+    while True:
+        index = get_next_index(len(args), index, direction)[0]
+        direction = get_next_index(len(args), index, direction)[1]
+        success = click(args[index], "move")
+        time.sleep(0.2)
+        if success:
+            if random.random() < settings["long_break_chance"]:
+                seconds = check_time() + random.uniform(100, 1000)
+                time.sleep(seconds)
             else:
-                continue
+                seconds = check_time() + random.uniform(3, 20)
+                print("Совершён переход в ", args[index], ", до следующего действия ", round(seconds), " секунд.")
+                time.sleep(seconds)
+        else:
+            continue
+
+
+def go(args=""):
+    """Команда перехода, маршрут проходится один раз до конца."""
+
+    if not args:
+        print("Для перехода нужны аргументы. Наберите help move для вывода дополнительной информации.")
+    for loc in args:
+        click(loc, "move")
+        time.sleep(check_time() + random.uniform(1, 5))
+
+
+def get_next_index(length, index=-1, direction=1):
+    index += direction
+    if index == length and direction == 1:
+        index -= 2
+        direction = -1
+    elif index == -1 and direction == -1:
+        index += 2
+        direction = 1
+    return index, direction
 
 
 def comm_handler(comm: str):
-    """Разделить ключевое слово команды, модификатор и аргументы"""
+    """Разделить ключевое слово команды и аргументы"""
 
     if comm in alias_dict.keys():
         comm_handler(alias_dict[comm])
     comm_list = comm.split(' ')
-    try:
-        main_comm = comm_list[0]
-        alt_comm = comm_list[1] if comm_list[1][0] != '(' else ''
-    except IndexError:
-        print("Ошибка синтаксиса.")
-        return
-
+    main_comm = comm_list[0]
     if main_comm == "alias":
         args = ' ('.join(comm.split(' (')[1:3:])[:-1]
     else:
         args = comm.split(' (')[1].rstrip(')').split(' - ') if comm_list[-1][-1] == ')' else ''
 
     if main_comm in comm_dict.keys():
-        return comm_dict[main_comm](alt_comm, args)
+        return comm_dict[main_comm](args)
     else:
         print('Команда не найдена. Наберите help для просмотра списка команд.')
         pass
@@ -159,8 +168,8 @@ def create_alias(name, comm):
     rewrite_config(config)
 
 
-def change_settings(args=''):
-    key, value = args[0], args[1]
+def change_settings(args=""):
+    key, value = args
     if key != "is_headless":
         config[0][key] = eval(value)
     else:
@@ -168,22 +177,17 @@ def change_settings(args=''):
     rewrite_config(config)
 
 
-def check_ls():
-    locator("newls", "ls")
-    print()
-
-
-comm_dict = {"move": move,
-             # move --alt_comm (location1 - locationN)
+comm_dict = {"patrol": patrol,
+             # patrol  (location1 - locationN)
+             "go": go,
+             # patrol  (location1 - locationN)
              "action": action,
-             # action --alt_comm (action1 - action2)
+             # action (action1 - action2)
              "alias": create_alias,
              # alias name (comm_to_execute)
              "settings": change_settings
-             # settings (key - value)
+             # settings "key: value" key:value
              }
-
-alt_list = ["--endless", "-e", ""]
 
 # mainloop
 
@@ -218,3 +222,8 @@ while True:
     if command == "exit":
         driver.quit()
         break
+
+# ДРЕВНИЕ МУДРОСТИ
+# regex в обработке строки в check_time - ок
+# try except keyboard interrupt
+# index & direction плохо (спрятать в next_index(index, len)) - ок

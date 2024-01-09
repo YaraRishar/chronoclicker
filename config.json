@@ -1,9 +1,5 @@
-[
-    {
-        "random_offset": [
-            40,
-            60
-        ],
+{
+    "settings": {
         "long_break_chance": 0.01,
         "long_break_duration": [
             100,
@@ -11,27 +7,25 @@
         ],
         "short_break_duration": [
             1,
-            5
+            8
         ],
-        "is_headless": "False"
+        "critical_sleep_pixels": 30,
+        "is_headless": "False",
+        "driver_path": "",
+        "max_waiting_time": 3
     },
-    {
-        "move": "//span[text()='{text}']/preceding-sibling::*",
-        "action": "//*[@class='dey'][@data-id='{text}']/descendant::*",
-        "ls": "//span[@id='{text}']",
-        "cancel": "//a[@id='{text}']",
-        "time": "//span[@id='{text}']"
-    },
-    {
+    "actions": {
         "Поспать": 1,
         "Вылизаться": 3,
         "Принюхаться": 13,
         "Копать землю": 17,
-        "Встать в боевую стойку": 27
+        "Поплавать": 24,
+        "Встать в боевую стойку": 27,
+        "Закончить бой": 28
     },
-    {
-        "кач_актив": "move --endless (Морозная поляна - Поляна для отдыха)",
-        "копатель_онлайн": "action -e (Копать землю - Вылизаться)",
-        "спать": "move (Морозная поляна - Поляна для отдыха - Тёмный лаз)"
+    "aliases": {
+        "кач_актив": "patrol Морозная поляна - Поляна для отдыха",
+        "копатель_онлайн": "action_loop Принюхаться - Копать землю",
+        "офф": "go Морозная поляна - Поляна для отдыха - Тёмный лаз"
     }
-]
+}

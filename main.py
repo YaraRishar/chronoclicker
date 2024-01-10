@@ -31,6 +31,8 @@ def check_time() -> int:
 
 
 def check_parameter(param_name) -> float | int:
+    """Проверить параметр param_name, вернуть его значение в процентах"""
+
     element = locate(f"//span[@id='{param_name}']/*/*/*/descendant::*")
     if not element:
         return -1
@@ -42,6 +44,8 @@ def check_parameter(param_name) -> float | int:
 
 
 def check_skill(skill_name) -> str:
+    """Проверить уровень и дробь навыка"""
+
     mouse_over(xpath=f"//span[@id='{skill_name}']/*/*/*/descendant::*")
     tooltip_elem = locate("//div[@id='tiptip_content']")
     if not tooltip_elem.text:
@@ -51,22 +55,32 @@ def check_skill(skill_name) -> str:
 
 
 def swim(escape_to_location=""):
+    """Команда для плавания с отсыпом на соседней локации. Критическое количество пикселей сна (при
+    котором начнётся отсып) указывается в настройках. Для справки:
+    20 пикс. = ~43 минуты сна, 30 пикс. = ~40 минут сна. Считаются 'оставшиеся' зелёные пиксели.
+    ВНИМАНИЕ: перед использованием этой команды проверьте на безопасной ПУ локации,
+    работает ли она на вашем устройстве.
+    Использование (находясь на локации с ПУ):
+    swim (локация_для_отсыпа)"""
+
     availible_locations = get_availible_actions()
     if escape_to_location and escape_to_location not in availible_locations:
         print("Для отсыпа введите название локации, соседней с плавательной!")
     elif not escape_to_location:
-        action_loop(["Поплавать"])
+        repeat(["Поплавать"])
     while True:
         sleep_pixels = check_parameter("dream")
         if sleep_pixels < settings["critical_sleep_pixels"]:
             current_location = locate("//span[@id='location']").text
             move_to_location(escape_to_location)
-            action(["Поспать"])
+            do(["Поспать"])
             move_to_location(current_location)
-        action(["Поплавать"])
+        do(["Поплавать"])
 
 
 def is_cw3_disabled() -> bool:
+    """Проверка на активность Игровой"""
+
     try:
         cw3_disabled_element = driver.find_element(By.XPATH, "//body[text()='Вы открыли новую вкладку с Игровой, "
                                                              "поэтому старая (эта) больше не работает.']")
@@ -77,7 +91,7 @@ def is_cw3_disabled() -> bool:
 
 
 def locate(xpath: str) -> WebElement | None:
-    """Найти элемент на странице по XPath. """
+    """Найти элемент на странице по xpath. """
 
     try:
         element = driver.find_element(By.XPATH, xpath)
@@ -91,7 +105,7 @@ def locate(xpath: str) -> WebElement | None:
 
 
 def click(xpath: str, offset_range=(0, 0)) -> bool:
-    """Кликает по элементу element с оффсетом offset_range.
+    """Клик по элементу element с оффсетом offset_range.
     Возвращает True, если был совершён клик по элементу. """
 
     element = locate(xpath)
@@ -108,7 +122,7 @@ def click(xpath: str, offset_range=(0, 0)) -> bool:
                                                  ).perform()
         action_chain.click_and_hold().perform()
     except MoveTargetOutOfBoundsException:
-        print("MoveTargetOutOfBoundsException raised for reasons unknown to man(")
+        print("MoveTargetOutOfBoundsException raised for reasons unknown to man :<")
     time.sleep(random.uniform(0, 0.2))
     action_chain.release().perform()
     time.sleep(random.uniform(0.01, 0.3))
@@ -116,6 +130,8 @@ def click(xpath: str, offset_range=(0, 0)) -> bool:
 
 
 def mouse_over(xpath: str, hover_for=0.1) -> bool:
+    """Передвинуть курсор к элементу по xpath"""
+
     element = locate(xpath)
     if not element or not element.is_displayed():
         return False
@@ -127,6 +143,8 @@ def mouse_over(xpath: str, hover_for=0.1) -> bool:
 
 
 def is_action_active() -> bool:
+    """Проверка на выволнение действия"""
+
     element = locate(xpath="//a[@id='cancel']")
     if element:
         return True
@@ -134,26 +152,41 @@ def is_action_active() -> bool:
 
 
 def cancel():
-    element = locate(xpath="//a[@id='cancel']")
-    if element:
-        click(xpath="//a[@id='cancel']")
+    """Отменить действие. Использование:
+    cancel"""
+
+    success = click(xpath="//a[@id='cancel']")
+    if success:
+        print("Действие отменено!")
+        return
+    print("Действие не выполняется!")
 
 
-def action_loop(args=None):
-    """Команда для бесконечного повторения действий по списку из arg. """
+def repeat(args=None):
+    """Команда для бесконечного повторения действий по списку из args. Использование:
+    action_loop действие1 - действие2 - действие3"""
+
     if not args or args == [""]:
         print("Для зацикленного действия нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
         return
     while True:
-        action(args)
+        do(args)
 
 
-def action(args=None):
+def do(args=None):
+    """Команда для исполнения последовательности действий 1 раз. Использование:
+    action действие1 - действие2 - действие3"""
+
     if not args or args == [""]:
         print("Для действия нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
         return
-    for i in range(len(args)):
-        success = click(xpath=f"//*[@id='akten']/a[@data-id={action_dict[args[i]]}]/img",
+    for action in args:
+        availible_actions = get_availible_actions()
+        if action not in availible_actions:
+            print(f"Действие {action} не может быть выполнено. Возможно, действие недоступно/"
+                  f"страница не прогрузилась до конца.\nДоступные действия: {', '.join(availible_actions)}.")
+            return
+        success = click(xpath=f"//*[@id='akten']/a[@data-id={action_dict[action]}]/img",
                         offset_range=(30, 30))
         if success:
             seconds = check_time() + random.uniform(settings["short_break_duration"][0],
@@ -162,26 +195,25 @@ def action(args=None):
             print(f"{last_hist_entry}. Действие продлится {round(seconds)} секунд.")
             monitor_cw3_chat(seconds)
 
-            if args[i] == "Принюхаться":
+            if action == "Принюхаться":
                 print(check_skill("smell"))
                 click(xpath="//input[@value='Вернуть поле']")
-            elif args[i] == "Копать землю":
+            elif action == "Копать землю":
                 print(check_skill("dig"))
-            elif args[i] == "Поплавать":
+            elif action == "Поплавать":
                 print(check_skill("swim"))
             print(f"Доступные действия: {', '.join(get_availible_actions())}")
         else:
             if is_action_active():
                 print("Действие уже совершается! Чтобы отменить, введите cancel.")
                 return
-            print(f"Действие {args[i]} не может быть выполнено. Возможно, действие недоступно/"
-                  f"страница не прогрузилась до конца.")
             continue
 
 
 def patrol(args=None):
     """Команда перехода, маршрут повторяется бесконечно
-    (для маршрута из 3 локаций: 1 - 2 - 3 - 2 - 1 - 2 - 3 и так далее)."""
+    (для маршрута из 3 локаций: 1 - 2 - 3 - 2 - 1 - 2 - 3 и так далее). Использование:
+    patrol имя_локации1 - имя_локации2 - имя_локации3"""
 
     if not args or args == [""]:
         print("Для перехода нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
@@ -195,7 +227,8 @@ def patrol(args=None):
 
 
 def go(args=None):
-    """Команда перехода, маршрут проходится один раз. """
+    """Команда перехода, маршрут проходится один раз. Использование:
+    go имя_локации1 - имя_локации2 - имя_локации3"""
 
     if not args or args == [""]:
         print("Для перехода нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
@@ -228,12 +261,16 @@ def move_to_location(location_name: str) -> bool:
 
 
 def get_availible_locations() -> list:
+    """Получить список переходов на локации"""
+
     elements = driver.find_elements(By.XPATH, "//span[@class='move_name']")
     locations_list = [element.text for element in elements]
     return locations_list
 
 
 def get_availible_actions() -> list:
+    """Получить список доступных в данный момент действий"""
+
     elements = driver.find_elements(By.XPATH, "//div[@id='akten']/a[@class='dey']")
     actions_list = []
     for element in elements:
@@ -245,6 +282,8 @@ def get_availible_actions() -> list:
 
 
 def print_cats():
+    """Вывести список игроков на одной локации с вами"""
+
     xpath = "//span[@class='cat_tooltip']/u/*"
     elements = driver.find_elements(By.XPATH, xpath)
     cats_list = [element.get_attribute(name="innerText") for element in elements]
@@ -256,7 +295,8 @@ def print_cats():
 
 
 def info():
-    """Команда для вывода информации о состоянии игрока из Игровой."""
+    """Команда для вывода информации о состоянии игрока из Игровой. Использование:
+    info"""
 
     current_location = locate("//span[@id='location']").text
     while current_location == "[ Загружается… ]":
@@ -280,7 +320,8 @@ def info():
 
 
 def char():
-    """Команда для вывода информации о персонаже с домашней страницы/Игровой."""
+    """Команда для вывода информации о персонаже с домашней страницы/Игровой. Использование:
+    char"""
 
     driver.get("https://catwar.su/")
 
@@ -297,6 +338,9 @@ def char():
 
 
 def hist():
+    """Команда для вывода истории действий из Игровой, использование:
+    hist"""
+
     print("История:")
     hist_list = locate("//span[@id='ist']").text.split(".")[:-1]
     for item in hist_list:
@@ -304,11 +348,16 @@ def hist():
 
 
 def clear_hist():
+    """Команда 'очистить историю', использование:
+    clear_hist"""
+
     click(xpath="//a[@id='history_clean']")
     print("История очищена.")
 
 
 def get_last_cw3_message() -> tuple:
+    """Получить последнее сообщение в чате Игровой и имя написавшего"""
+
     try:
         last_message = locate(xpath="//*[@id='chat_msg']/span[1]/table/tbody/tr/td[1]/span/span").text
         name_from = locate(xpath="//*[@id='chat_msg']/span[1]/table/tbody/tr/td[1]/span/b").text
@@ -318,9 +367,11 @@ def get_last_cw3_message() -> tuple:
 
 
 def monitor_cw3_chat(monitor_until_time: float):
-    current_time = time.time() + monitor_until_time
+    """Выводить последние сообщения в чате Игровой, пока не истечёт время end_time"""
+
+    end_time = time.time() + monitor_until_time
     temp_message = ('', '')
-    while time.time() <= current_time:
+    while time.time() <= end_time:
         time.sleep(1)
         message_bundle = get_last_cw3_message()
         if message_bundle == temp_message:
@@ -332,13 +383,15 @@ def monitor_cw3_chat(monitor_until_time: float):
 
 
 def text_to_chat(message: str):
+    """Написать сообщение в чат Игровой"""
+
     chat_entry = locate(xpath="//input[@id='text']")
     chat_entry.send_keys(message)
     click(xpath="//*[@id='msg_send']")
 
 
 def get_next_index(length, index=-1, direction=1):
-    """Техническая функция для получения индекса следующей локации в патруле."""
+    """Получить индекс следующей локации в патруле."""
 
     index += direction
     if index == length and direction == 1:
@@ -351,36 +404,32 @@ def get_next_index(length, index=-1, direction=1):
 
 
 def comm_handler(comm: str):
-    """Техническая функция, разделяющая ключевое слово команды и аргументы."""
+    """Разделить ключевое слово команды и аргументы."""
 
-    if comm in alias_dict.keys():
-        comm_handler(alias_dict[comm])
+    if not comm:
+        return print("Введите команду! Пример: patrol Морозная поляна - Каменная гряда")
+    elif comm in alias_dict.keys():
+        return comm_handler(alias_dict[comm])
 
     try:
         main_comm = comm.split(" ")[0]
         comm = comm.replace(main_comm + " ", "")
         args = comm.split(" - ")
     except IndexError:
-        print("Ошибка в парсинге аргумента. Введите comm_help для просмотра списка команд.")
-        return
-    # comm = name patrol loc1 - loc2
-    if main_comm == "alias" and comm.split(" ")[1] in comm_dict.keys():
-        name = comm.split(" ")[0]
-        comm_to_alias = comm.replace(name + " ", "")
-        args = name, comm_to_alias
+        return print("Ошибка в парсинге аргумента. Введите comm_help для просмотра списка команд.")
 
-    if main_comm in comm_dict.keys():
-        if args:
-            return comm_dict[main_comm](args)
-        else:
-            return comm_dict[main_comm]()
-    else:
-        print("Команда не найдена. Наберите comm_help для просмотра списка команд.")
-        pass
+    if main_comm == "alias":
+        return create_alias(comm)
+    if main_comm not in comm_dict.keys():
+        return print("Команда не найдена. Наберите comm_help для просмотра списка команд.")
+
+    if comm == main_comm:
+        return comm_dict[main_comm]()
+    return comm_dict[main_comm](args)
 
 
 def load_config() -> dict:
-    """Техническая функция, загружающая файл настроек config.json."""
+    """Загрузить файл настроек config.json."""
 
     try:
         with open("config.json", "r", encoding="utf-8") as file:
@@ -392,14 +441,15 @@ def load_config() -> dict:
         load_config()
 
 
-def rewrite_config(new_config):
-    """Техническая функция, обновляющая файл настроек config.json при их изменении."""
+def rewrite_config(new_config: dict):
+    """Обновить файл настроек config.json при их изменении."""
 
     with open("config.json", "w") as file:
         file.write(json.dumps(new_config, ensure_ascii=False, indent=4))
+    print("Настройки обновлены!")
 
 
-def create_alias(args=()):
+def create_alias(comm):
     """Команда для создания сокращений для часто используемых команд.
     Использование:
     alias name comm
@@ -407,21 +457,44 @@ def create_alias(args=()):
     alias кач_актив patrol Морозная поляна - Поляна для отдыха
     В дальнейшем команда patrol Морозная поляна - Поляна для отдыха будет исполняться при вводе кач_актив"""
 
-    name, comm = args
-    config[-1][name] = comm
+    try:
+        main_alias_comm = comm.split(" ")[1]
+    except IndexError:
+        print("Ошибка в парсинге сокращения. Пример использования команды:"
+              "\nalias кач_актив patrol Морозная поляна - Поляна для отдыха")
+        return
+    if main_alias_comm not in comm_dict.keys():
+        print(f"Команда {main_alias_comm} не найдена, сокращение не было создано.")
+        return
+    name = comm.split(" ")[0]
+    comm_to_alias = comm.replace(name + " ", "")
+    config["aliases"][name] = comm_to_alias
     rewrite_config(config)
 
 
-def change_settings(args=""):
+def change_settings(args=()):
+    """Команда для изменения настроек. Использование:
+    settings key - value
+    (Пример: settings is_headless - True)"""
+
+    if not args or len(args) > 2:
+        print("Ошибка в парсинге аргумента.")
+        return
     key, value = args
-    if key != "is_headless":
-        config[0][key] = eval(value)
-    else:
-        config[0][key] = value
+    try:
+        if key == "is_headless" or key == "driver_path":
+            config["settings"][key] = value
+        else:
+            config["settings"][key] = eval(value)
+    except ValueError:
+        print("Ошибка в парсинге аргумента.")
+        return
     rewrite_config(config)
 
 
 def crash_handler(exception_type: Exception):
+    """Создать крашлог в папке crashlogs, которая находится на том же уровне, что и main.py"""
+
     if type(exception_type).__name__ == "KeyboardInterrupt":
         pass
     now = datetime.datetime.now()
@@ -436,29 +509,29 @@ def crash_handler(exception_type: Exception):
 
 
 def comm_help():
-    print(comm_dict.keys())
+    """Вывести все доступные команды."""
+
+    print(", ".join(comm_dict.keys()))
 
 
 def refresh():
+    """Перезагрузить страницу"""
     driver.refresh()
-
-
-def driver_exit():
-    driver.quit()
+    print("Страница обновлена!")
 
 
 comm_dict = {"patrol": patrol,
              # patrol  location1 - locationN
              "go": go,
              # go  location1 - locationN
-             "action": action,
-             # action action1 - actionN
-             "action_loop": action_loop,
-             # action_loop action1 - actionN
+             "do": do,
+             # do action1 - actionN
+             "repeat": repeat,
+             # repeat action1 - actionN
              "alias": create_alias,
              # alias name comm_to_execute
              "settings": change_settings,
-             # settings "key: value" key:value
+             # settings key value
              "swim": swim,
              # swim location_to_escape
              "char": char,
@@ -477,8 +550,6 @@ comm_dict = {"patrol": patrol,
              # say message
              "cancel": cancel,
              # cancel
-             "q": driver_exit
-             # q
              }
 
 options = webdriver.ChromeOptions()
@@ -492,6 +563,7 @@ options.add_experimental_option("excludeSwitches", ["enable-automation"])
 options.add_experimental_option('useAutomationExtension', False)
 
 if __name__ == "__main__":
+    print("Загрузка...")
     config = load_config()
     settings = config["settings"]
     action_dict = config["actions"]
@@ -530,9 +602,9 @@ if __name__ == "__main__":
     try:
         while True:
             command = input(">>> ")
-            if not command:
-                print("Введите команду! Пример: patrol Морозная поляна - Каменная гряда")
-                continue
-            comm_handler(command)
+            if command != "q":
+                comm_handler(command)
+            else:
+                break
     except Exception as exception:
         crash_handler(exception)

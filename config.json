@@ -1,6 +1,6 @@
 {
     "settings": {
-        "long_break_chance": 0.01,
+        "long_break_chance": 0.03,
         "long_break_duration": [
             100,
             1000
@@ -9,7 +9,7 @@
             1,
             8
         ],
-        "critical_sleep_pixels": 30,
+        "critical_sleep_pixels": 20,
         "is_headless": "False",
         "driver_path": "",
         "max_waiting_time": 3
@@ -25,7 +25,7 @@
     },
     "aliases": {
         "кач_актив": "patrol Морозная поляна - Поляна для отдыха",
-        "копатель_онлайн": "action_loop Принюхаться - Копать землю",
+        "копатель_онлайн": "repeat Принюхаться - Копать землю",
         "офф": "go Морозная поляна - Поляна для отдыха - Тёмный лаз"
     }
 }

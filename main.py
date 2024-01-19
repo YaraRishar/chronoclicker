@@ -2,9 +2,12 @@ from selenium import webdriver
 from selenium_stealth import stealth
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.common.exceptions import NoSuchElementException, MoveTargetOutOfBoundsException
+from selenium.common.exceptions import (NoSuchElementException,
+                                        MoveTargetOutOfBoundsException)
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions
 import time
 import random
 import json
@@ -164,28 +167,35 @@ def cancel():
 
 def repeat(args=None):
     """Команда для бесконечного повторения действий по списку из args. Использование:
-    action_loop действие1 - действие2 - действие3"""
+    repeat действие1 - действие2 - действие3"""
 
     if not args or args == [""]:
         print("Для зацикленного действия нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
         return
     while True:
         do(args)
+        if random.random() < settings["long_break_chance"]:
+            seconds = random.uniform(settings["long_break_duration"][0], settings["long_break_duration"][1])
+            print("long break triggered! sleeping for", round(seconds), "seconds...")
+            time.sleep(seconds)
 
 
 def do(args=None):
     """Команда для исполнения последовательности действий 1 раз. Использование:
-    action действие1 - действие2 - действие3"""
+    do действие1 - действие2 - действие3"""
 
     if not args or args == [""]:
         print("Для действия нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
         return
     for action in args:
         availible_actions = get_availible_actions()
+        if is_action_active():
+            print("Действие уже совершается! Чтобы отменить, введите cancel.")
+            return
         if action not in availible_actions:
             print(f"Действие {action} не может быть выполнено. Возможно, действие недоступно/"
                   f"страница не прогрузилась до конца.\nДоступные действия: {', '.join(availible_actions)}.")
-            return
+            continue
         success = click(xpath=f"//*[@id='akten']/a[@data-id={action_dict[action]}]/img",
                         offset_range=(30, 30))
         if success:
@@ -193,7 +203,10 @@ def do(args=None):
                                                     settings["short_break_duration"][1])
             last_hist_entry = locate("//span[@id='ist']").text.split(".")[-2]
             print(f"{last_hist_entry}. Действие продлится {round(seconds)} секунд.")
-            monitor_cw3_chat(seconds)
+            if settings["monitor_chat_while_waiting"]:
+                monitor_cw3_chat(seconds)
+            else:
+                time.sleep(seconds)
 
             if action == "Принюхаться":
                 print(check_skill("smell"))
@@ -204,9 +217,6 @@ def do(args=None):
                 print(check_skill("swim"))
             print(f"Доступные действия: {', '.join(get_availible_actions())}")
         else:
-            if is_action_active():
-                print("Действие уже совершается! Чтобы отменить, введите cancel.")
-                return
             continue
 
 
@@ -218,6 +228,9 @@ def patrol(args=None):
     if not args or args == [""]:
         print("Для перехода нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
         return
+    if len(args) == 1:
+        while True:
+            move_to_location(args[0])
     index, direction = -1, 1
     while True:
         index, direction = get_next_index(len(args), index, direction)
@@ -242,20 +255,20 @@ def go(args=None):
 def move_to_location(location_name: str) -> bool:
     """Техническая функция для перехода на локацию. """
 
-    locations = get_availible_locations()
-    if location_name not in locations:
-        print(f"Локация {location_name} недоступна. Доступные локации: {', '.join(locations)}.")
-        return False
     has_moved = click(xpath=f"//span[text()='{location_name}']/preceding-sibling::*",
                       offset_range=(45, 70))
-    seconds = check_time() + random.uniform(3, 20)
+    seconds = check_time() + random.uniform(settings["short_break_duration"][0],
+                                            settings["short_break_duration"][1])
     if random.random() < settings["long_break_chance"]:
         print("long break triggered")
         seconds += random.uniform(settings["long_break_duration"][0], settings["long_break_duration"][1])
     print(f"Совершён переход в {location_name}, до следующего действия {round(seconds)} секунд.")
-    print(f"Доступные локации: {', '.join(get_availible_locations())}")
-    print_cats()
-    monitor_cw3_chat(seconds)
+    # print(f"Доступные локации: {', '.join(get_availible_locations())}")
+    # print_cats()
+    if settings["monitor_chat_while_waiting"] == "True":
+        monitor_cw3_chat(seconds)
+    else:
+        time.sleep(seconds)
 
     return has_moved
 
@@ -264,8 +277,14 @@ def get_availible_locations() -> list:
     """Получить список переходов на локации"""
 
     elements = driver.find_elements(By.XPATH, "//span[@class='move_name']")
-    locations_list = [element.text for element in elements]
-    return locations_list
+    location_list = []
+    for element in elements:
+        is_not_stale = WebDriverWait(driver, 3).until_not(
+            expected_conditions.staleness_of(element))
+        if is_not_stale:
+            location_list.append(element.text)
+            print(element.text, "appended to location_list")
+    return location_list
 
 
 def get_availible_actions() -> list:
@@ -284,9 +303,8 @@ def get_availible_actions() -> list:
 def print_cats():
     """Вывести список игроков на одной локации с вами"""
 
-    xpath = "//span[@class='cat_tooltip']/u/*"
-    elements = driver.find_elements(By.XPATH, xpath)
-    cats_list = [element.get_attribute(name="innerText") for element in elements]
+    cats_list = [element.get_attribute(name="innerText") for element in WebDriverWait(driver, 3).until(
+        expected_conditions.presence_of_all_elements_located((By.XPATH, "//span[@class='cat_tooltip']/u/*")))]
     if cats_list:
         print("Коты на локации:")
         for i in range(len(cats_list)):
@@ -304,8 +322,8 @@ def info():
 
     print(f"Текущая локация: {current_location}.")
     print(f"Доступные действия: {', '.join(get_availible_actions())}")
-    print(f"Доступные локации: {', '.join(get_availible_locations())}")
-    print_cats()
+    # print(f"Доступные локации: {', '.join(get_availible_locations())}")
+    # print_cats()
 
     print(f"\tСонливость:  {check_parameter('dream')}%")
     print(f"\tГолод:\t\t {check_parameter('hunger')}%")
@@ -391,7 +409,7 @@ def text_to_chat(message: str):
 
 
 def get_next_index(length, index=-1, direction=1):
-    """Получить индекс следующей локации в патруле."""
+    """Получить индекс следующей локации в патруле"""
 
     index += direction
     if index == length and direction == 1:
@@ -404,7 +422,7 @@ def get_next_index(length, index=-1, direction=1):
 
 
 def comm_handler(comm: str):
-    """Разделить ключевое слово команды и аргументы."""
+    """Разделить ключевое слово команды и аргументы"""
 
     if not comm:
         return print("Введите команду! Пример: patrol Морозная поляна - Каменная гряда")
@@ -429,7 +447,7 @@ def comm_handler(comm: str):
 
 
 def load_config() -> dict:
-    """Загрузить файл настроек config.json."""
+    """Загрузить файл настроек config.json"""
 
     try:
         with open("config.json", "r", encoding="utf-8") as file:
@@ -442,7 +460,7 @@ def load_config() -> dict:
 
 
 def rewrite_config(new_config: dict):
-    """Обновить файл настроек config.json при их изменении."""
+    """Обновить файл настроек config.json при их изменении"""
 
     with open("config.json", "w") as file:
         file.write(json.dumps(new_config, ensure_ascii=False, indent=4))

@@ -1,22 +1,24 @@
 {
     "settings": {
-        "long_break_chance": 0.03,
+        "long_break_chance": 0.05,
         "long_break_duration": [
-            100,
-            1000
+            10,
+            500
         ],
         "short_break_duration": [
             1,
-            8
+            15
         ],
         "critical_sleep_pixels": 20,
         "is_headless": "False",
         "driver_path": "",
-        "max_waiting_time": 3
+        "max_waiting_time": 3,
+        "monitor_chat_while_waiting": "False"
     },
     "actions": {
         "Поспать": 1,
         "Вылизаться": 3,
+        "Попить воды": 5,
         "Принюхаться": 13,
         "Копать землю": 17,
         "Поплавать": 24,

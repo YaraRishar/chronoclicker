@@ -1,9 +1,12 @@
+from selenium.webdriver.common.actions.action_builder import ActionBuilder
+
 from selenium import webdriver
 from selenium_stealth import stealth
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.common.exceptions import (NoSuchElementException,
-                                        MoveTargetOutOfBoundsException)
+                                        MoveTargetOutOfBoundsException,
+                                        StaleElementReferenceException, TimeoutException)
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
@@ -21,7 +24,7 @@ def check_time() -> int:
     """Проверить, сколько времени осталось до окончания действия.
     Если никакое действие в данный момент не выполняется, возвращает 1."""
 
-    element = locate("//span[@id='sek']")
+    element: WebElement = locate("//span[@id='sek']")
     if not element:
         return 1
     match_seconds = re.match(r"(\d*) мин (\d*) с", element.text)
@@ -64,7 +67,7 @@ def swim(escape_to_location=""):
     ВНИМАНИЕ: перед использованием этой команды проверьте на безопасной ПУ локации,
     работает ли она на вашем устройстве.
     Использование (находясь на локации с ПУ):
-    swim (локация_для_отсыпа)"""
+    swim локация_для_отсыпа"""
 
     availible_locations = get_availible_actions()
     if escape_to_location and escape_to_location not in availible_locations:
@@ -107,6 +110,12 @@ def locate(xpath: str) -> WebElement | None:
             return None
 
 
+def remove_cursor():
+    action_builder = ActionBuilder(driver)
+    action_builder.pointer_action.move_to_location(1, 8)
+    action_builder.perform()
+
+
 def click(xpath: str, offset_range=(0, 0)) -> bool:
     """Клик по элементу element с оффсетом offset_range.
     Возвращает True, если был совершён клик по элементу. """
@@ -116,19 +125,21 @@ def click(xpath: str, offset_range=(0, 0)) -> bool:
         return False
     random_offset = (random.randint(-offset_range[0], offset_range[0]),
                      random.randint(-offset_range[1], offset_range[1]))
-    action_chain = ActionChains(driver)
     try:
+        action_chain = ActionChains(driver)
         action_chain.scroll_to_element(element).perform()
         action_chain.move_to_element_with_offset(to_element=element,
                                                  xoffset=random_offset[0],
                                                  yoffset=random_offset[1]
                                                  ).perform()
         action_chain.click_and_hold().perform()
+        time.sleep(random.uniform(0, 0.1))
+        action_chain.release().perform()
+        remove_cursor()
     except MoveTargetOutOfBoundsException:
         print("MoveTargetOutOfBoundsException raised for reasons unknown to man :<")
-    time.sleep(random.uniform(0, 0.2))
-    action_chain.release().perform()
-    time.sleep(random.uniform(0.01, 0.3))
+        print("random offset =", random_offset)
+        return False
     return True
 
 
@@ -154,15 +165,16 @@ def is_action_active() -> bool:
     return False
 
 
-def cancel():
+def cancel() -> bool:
     """Отменить действие. Использование:
     cancel"""
 
     success = click(xpath="//a[@id='cancel']")
     if success:
         print("Действие отменено!")
-        return
+        return True
     print("Действие не выполняется!")
+    return False
 
 
 def repeat(args=None):
@@ -203,7 +215,7 @@ def do(args=None):
                                                     settings["short_break_duration"][1])
             last_hist_entry = locate("//span[@id='ist']").text.split(".")[-2]
             print(f"{last_hist_entry}. Действие продлится {round(seconds)} секунд.")
-            if settings["monitor_chat_while_waiting"]:
+            if settings["monitor_chat_while_waiting"] == "True":
                 monitor_cw3_chat(seconds)
             else:
                 time.sleep(seconds)
@@ -255,8 +267,13 @@ def go(args=None):
 def move_to_location(location_name: str) -> bool:
     """Техническая функция для перехода на локацию. """
 
-    has_moved = click(xpath=f"//span[text()='{location_name}']/preceding-sibling::*",
-                      offset_range=(45, 70))
+    locations = get_availible_locations()
+    if location_name in locations:
+        has_moved = click(xpath=f"//span[text()='{location_name}' and @class='move_name']/preceding-sibling::*",
+                          offset_range=(40, 70))
+    else:
+        print("\t\tlocation name is not in av location list")
+        return False
     seconds = check_time() + random.uniform(settings["short_break_duration"][0],
                                             settings["short_break_duration"][1])
     if random.random() < settings["long_break_chance"]:
@@ -273,20 +290,6 @@ def move_to_location(location_name: str) -> bool:
     return has_moved
 
 
-def get_availible_locations() -> list:
-    """Получить список переходов на локации"""
-
-    elements = driver.find_elements(By.XPATH, "//span[@class='move_name']")
-    location_list = []
-    for element in elements:
-        is_not_stale = WebDriverWait(driver, 3).until_not(
-            expected_conditions.staleness_of(element))
-        if is_not_stale:
-            location_list.append(element.text)
-            print(element.text, "appended to location_list")
-    return location_list
-
-
 def get_availible_actions() -> list:
     """Получить список доступных в данный момент действий"""
 
@@ -300,11 +303,41 @@ def get_availible_actions() -> list:
     return actions_list
 
 
+def get_availible_locations() -> list:
+    """Получить список переходов на локации"""
+
+    try:
+        elements = WebDriverWait(driver, 5).until(expected_conditions.
+                                                  visibility_of_all_elements_located
+                                                  ((By.XPATH, "//span[@class='move_name']")))
+    except TimeoutException:
+        if is_cw3_disabled():
+            refresh()
+        elements = WebDriverWait(driver, 5).until(expected_conditions.
+                                                  visibility_of_all_elements_located
+                                                  ((By.XPATH, "//span[@class='move_name']")))
+    location_list = []
+    for element in elements:
+        try:
+            location_list.append(element.get_attribute(name="innerText"))
+        except StaleElementReferenceException:
+            print("\t\tencountered stale element, retrying getloc call...")
+            time.sleep(1)
+            get_availible_locations()
+
+    return location_list
+
+
 def print_cats():
     """Вывести список игроков на одной локации с вами"""
 
-    cats_list = [element.get_attribute(name="innerText") for element in WebDriverWait(driver, 3).until(
-        expected_conditions.presence_of_all_elements_located((By.XPATH, "//span[@class='cat_tooltip']/u/*")))]
+    elements = driver.find_elements(By.XPATH, "//span[@class='cat_tooltip']/u/*")
+    cats_list = []
+    for element in elements:
+        try:
+            cats_list.append(element.get_attribute(name="innerText"))
+        except StaleElementReferenceException:
+            print("\t\tencountered stale element, retrying print_cats call...")
     if cats_list:
         print("Коты на локации:")
         for i in range(len(cats_list)):
@@ -320,18 +353,16 @@ def info():
     while current_location == "[ Загружается… ]":
         current_location = locate("//span[@id='location']").text
 
-    print(f"Текущая локация: {current_location}.")
-    print(f"Доступные действия: {', '.join(get_availible_actions())}")
-    # print(f"Доступные локации: {', '.join(get_availible_locations())}")
-    # print_cats()
-
-    print(f"\tСонливость:  {check_parameter('dream')}%")
-    print(f"\tГолод:\t\t {check_parameter('hunger')}%")
-    print(f"\tЖажда:\t\t {check_parameter('thirst')}%")
-    print(f"\tНужда:\t\t {check_parameter('need')}%")
-    print(f"\tЗдоровье:\t{check_parameter('health')}%")
-    print(f"\tЧистота: \t {check_parameter('clean')}%")
-
+    print(f"Текущая локация: {current_location}.\n"
+          f"Доступные действия: {', '.join(get_availible_actions())}\n"
+          f"Доступные локации: {', '.join(get_availible_locations())}")
+    print_cats()
+    print(f"\tСонливость:  {check_parameter('dream')}%\n"
+          f"\tГолод:\t\t {check_parameter('hunger')}%\n"
+          f"\tЖажда:\t\t {check_parameter('thirst')}%\n"
+          f"\tНужда:\t\t {check_parameter('need')}%\n"
+          f"\tЗдоровье:\t{check_parameter('health')}%\n"
+          f"\tЧистота: \t {check_parameter('clean')}%")
     print("Последние 5 записей в истории (введите hist, чтобы посмотреть полную историю):")
     hist_list = locate("//span[@id='ist']").text.split('.')[-6:-1]
     print(f"\t{'. '.join(hist_list)}.")
@@ -342,17 +373,19 @@ def char():
     char"""
 
     driver.get("https://catwar.su/")
+    rank = locate('''//div[@id='pr']/i''')
 
-    print(f"Имя: {locate('''//div[@id='pr']/big''').text}\n"
-          f"Должность: {locate('''//div[@id='pr']/i''').text}\n"
-          f"Луны: {locate('''//div[@id='pr']/table/tbody/tr[2]/td[2]/b''').text}\n"
+    print(f"Имя: {locate('''//div[@id='pr']/big''').text}")
+    if rank:
+        print(f"Должность: {rank.text}\n")
+    print(f"Луны: {locate('''//div[@id='pr']/table/tbody/tr[2]/td[2]/b''').text}\n"
           f"ID: {locate('''//b[@id='id_val']''').text}\n"
           f"Активность: {locate('''//div[@id='act_name']/b''').text}")
     driver.get("https://catwar.su/cw3/")
-    print(check_skill("smell"))
-    print(check_skill("dig"))
-    print(check_skill("swim"))
-    print(check_skill("might"))
+    print(f"{check_skill('smell')}\n"
+          f"{check_skill('dig')}\n"
+          f"{check_skill('swim')}\n"
+          f"{check_skill('might')}")
 
 
 def hist():
@@ -514,13 +547,15 @@ def crash_handler(exception_type: Exception):
     """Создать крашлог в папке crashlogs, которая находится на том же уровне, что и main.py"""
 
     if type(exception_type).__name__ == "KeyboardInterrupt":
-        pass
+        return
     now = datetime.datetime.now()
     crash_time = now.strftime("%y-%m-%d_%H.%M.%S")
     path = os.path.dirname(__file__)
     if not os.path.exists(f"{path}/crashlogs"):
         os.mkdir(f"{path}/crashlogs")
     filename = os.path.join(path, f"crashlogs/crash-{crash_time}.txt")
+    print(f"Кликер вылетел, exception: {type(exception_type).__name__}. Крашлог находится в папке crashlogs и "
+          f"называется {filename}")
     with open(filename, "w") as crashlog:
         stacktrace = traceback.format_exc()
         crashlog.writelines(["---CHRONOCLICKER CRASHLOG---", "\n", "time:", crash_time, "\n", stacktrace])
@@ -536,6 +571,39 @@ def refresh():
     """Перезагрузить страницу"""
     driver.refresh()
     print("Страница обновлена!")
+
+
+def jump_to_cage(cage_index=None):
+    if not cage_index or cage_index == [""]:
+        print("no cage index!")
+        return
+    try:
+        row, column = int(cage_index[0]), int(cage_index[1])
+    except (IndexError, ValueError):
+        print("jump row - column")
+        return
+    if row > 6 or row < 0 or column < 0 or column > 10:
+        print("invalid cage index!")
+        return
+    xpath = f"//*[@id='cages']/tbody/tr[{row}]/td[{column}]/div"
+    # cage_element = locate(xpath=f"{xpath}/span[@class='move_parent']/span[@class='move_name']")
+    # if cage_element:
+    #     move_to_location(cage_element.text)
+    #     return
+    click(xpath=xpath, offset_range=(40, 70))
+
+
+def is_cat_in_action(cat_id: int) -> bool:
+    element = locate(f"//select[@id='mit']/option[@value='{cat_id}']")
+    element.submit()
+    time.sleep(random.uniform(0.1, 0.5))
+    click(xpath="//input[@id='mitok']")
+    time.sleep(random.uniform(0.1, 0.5))
+    click(xpath="//img[@src='actions/9.png']")
+    time.sleep(random.uniform(0.5, 2))
+    result = cancel()
+    print(result)
+    return result
 
 
 comm_dict = {"patrol": patrol,
@@ -568,6 +636,19 @@ comm_dict = {"patrol": patrol,
              # say message
              "cancel": cancel,
              # cancel
+             "jump": jump_to_cage,
+             # jump row - column
+             """             "fight": fight_mode,
+             # fight
+             "turn": turn_arrow,
+             # turn degrees
+             "spin": spin_arrow,
+             # spin seconds
+             "hit": hit,
+             # hit
+             "train": training_with_sleep,
+             # train bodypart - partner_id - hits_from_me - hits_from_partner - rounds"""
+             "check_cat": is_cat_in_action,
              }
 
 options = webdriver.ChromeOptions()
@@ -586,16 +667,20 @@ if __name__ == "__main__":
     settings = config["settings"]
     action_dict = config["actions"]
     alias_dict = config["aliases"]
+    print("Настройки загружены...")
 
     if settings["is_headless"] == "True":
+        print("Запуск в фоновом режиме...")
         options.add_argument("--headless")
 
     if settings["driver_path"]:
         driver_path = settings["driver_path"]
         service = Service(driver_path)
         driver = webdriver.Chrome(service=service, options=options)
+        print(f"Вебдрайвер запущен, путь {driver_path}")
     else:
         driver = webdriver.Chrome(options=options)
+        print("Вебдрайвер запущен.")
 
     stealth(driver,
             languages=["en-US", "en"],
@@ -606,6 +691,7 @@ if __name__ == "__main__":
             fix_hairline=True)
 
     driver.implicitly_wait(settings["max_waiting_time"])
+    print(f"Игровая загружается, если прошло более {settings['max_waiting_time']} секунд - перезапустите кликер.")
     driver.get("https://catwar.su/cw3/")  # vibecheck https://bot.sannysoft.com/
 
     if driver.current_url != "https://catwar.su/cw3/":

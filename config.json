@@ -1,16 +1,16 @@
 {
     "settings": {
-        "long_break_chance": 0.05,
+        "long_break_chance": 0.02,
         "long_break_duration": [
             10,
-            500
+            200
         ],
         "short_break_duration": [
             1,
             15
         ],
         "critical_sleep_pixels": 20,
-        "is_headless": "False",
+        "is_headless": "True",
         "driver_path": "",
         "max_waiting_time": 3,
         "monitor_chat_while_waiting": "False"
@@ -26,7 +26,7 @@
         "Закончить бой": 28
     },
     "aliases": {
-        "кач_актив": "patrol Морозная поляна - Поляна для отдыха",
+        "кач_актив": "patrol Морозная поляна - Поляна для отдыха - Морозная поляна - Каменная гряда - Морозная поляна - Великое Древо - Морозная поляна",
         "копатель_онлайн": "repeat Принюхаться - Копать землю",
         "офф": "go Морозная поляна - Поляна для отдыха - Тёмный лаз"
     }

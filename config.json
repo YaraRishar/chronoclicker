@@ -1,8 +1,8 @@
 {
     "settings": {
-        "long_break_chance": 0.02,
+        "long_break_chance": 0.05,
         "long_break_duration": [
-            10,
+            60,
             200
         ],
         "short_break_duration": [

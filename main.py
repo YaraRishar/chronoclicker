@@ -482,11 +482,15 @@ def multi_comm_handler(multi_comm: str):
         return comm_handler(alias_dict[multi_comm])
 
     multi_comm_list: list = multi_comm.split("; ")
+    first_word = multi_comm.split(" ")[0]
+    if first_word == "alias":
+        multi_comm = multi_comm.replace("alias ", "")
+        return create_alias(multi_comm)
     for comm in multi_comm_list:
-        comm_handler(comm)
+        comm_handler(comm, multi_comm)
 
 
-def comm_handler(comm: str):
+def comm_handler(comm: str, multi_comm=None):
     """Разделить ключевое слово команды и аргументы"""
 
     try:
@@ -537,6 +541,7 @@ def create_alias(comm):
 
     try:
         main_alias_comm = comm.split(" ")[1]
+        print(main_alias_comm)
     except IndexError:
         print("Ошибка в парсинге сокращения. Пример использования команды:"
               "\nalias кач_актив patrol Морозная поляна - Поляна для отдыха")

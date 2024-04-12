@@ -1,4 +1,5 @@
 from selenium.webdriver.common.actions.action_builder import ActionBuilder
+from selenium.webdriver.support.select import Select
 
 from selenium import webdriver
 from selenium_stealth import stealth
@@ -52,11 +53,13 @@ def check_parameter(param_name) -> float | int:
 def check_skill(skill_name) -> str:
     """Проверить уровень и дробь навыка"""
 
-    mouse_over(xpath=f"//span[@id='{skill_name}']/*/*/*/descendant::*")
     tooltip_elem = locate("//div[@id='tiptip_content']")
+    level_elem = locate(f"//table[@id='{skill_name}_table']")
+    mouse_over(xpath=f"//span[@id='{skill_name}']/*/*/*/descendant::*")
     if not tooltip_elem.text:
         mouse_over(xpath=f"//span[@id='{skill_name}']/*/*/*/descendant::*", hover_for=0.01)
-    level_elem = locate(f"//table[@id='{skill_name}_table']")
+    if skill_name in tooltip_elem.text:
+        return tooltip_elem.text + ", уровень " + level_elem.text
     return tooltip_elem.text + ", уровень " + level_elem.text
 
 
@@ -116,13 +119,20 @@ def remove_cursor():
     action_builder.perform()
 
 
-def click(xpath: str, offset_range=(0, 0)) -> bool:
+def click(xpath="xpath", offset_range=(0, 0), given_element=None) -> bool:
     """Клик по элементу element с оффсетом offset_range.
     Возвращает True, если был совершён клик по элементу. """
 
-    element = locate(xpath)
+    if xpath != "xpath" and not given_element:
+        element = locate(xpath)
+    elif given_element:
+        element = given_element
+    else:
+        return False
+
     if not element or not element.is_displayed():
         return False
+
     random_offset = (random.randint(-offset_range[0], offset_range[0]),
                      random.randint(-offset_range[1], offset_range[1]))
     try:
@@ -208,7 +218,7 @@ def do(args=None):
             print(f"Действие {action} не может быть выполнено. Возможно, действие недоступно/"
                   f"страница не прогрузилась до конца.\nДоступные действия: {', '.join(availible_actions)}.")
             continue
-        success = click(xpath=f"//*[@id='akten']/a[@data-id={action_dict[action]}]/img",
+        success = click(xpath=f"//a[@data-id={action_dict[action]}][@class='dey']/img",
                         offset_range=(30, 30))
         if success:
             seconds = check_time() + random.uniform(settings["short_break_duration"][0],
@@ -267,13 +277,14 @@ def go(args=None):
 def move_to_location(location_name: str) -> bool:
     """Техническая функция для перехода на локацию. """
 
-    locations = get_availible_locations()
-    if location_name in locations:
+    element = locate(f"//span[text()='{location_name}' and @class='move_name']/preceding-sibling::*")
+    wait = WebDriverWait(driver, 5)
+    element = wait.until(expected_conditions.visibility_of(element))
+    if not element:
+        return False
+    else:
         has_moved = click(xpath=f"//span[text()='{location_name}' and @class='move_name']/preceding-sibling::*",
                           offset_range=(40, 70))
-    else:
-        print("\t\tlocation name is not in av location list")
-        return False
     seconds = check_time() + random.uniform(settings["short_break_duration"][0],
                                             settings["short_break_duration"][1])
     if random.random() < settings["long_break_chance"]:
@@ -293,7 +304,9 @@ def move_to_location(location_name: str) -> bool:
 def get_availible_actions() -> list:
     """Получить список доступных в данный момент действий"""
 
-    elements = driver.find_elements(By.XPATH, "//div[@id='akten']/a[@class='dey']")
+    elements_self = driver.find_elements(By.XPATH, "//div[@id='akten']/a[@class='dey']")
+    elements_others = driver.find_elements(By.XPATH, "//div[@id='dein']/a[@class='dey']")
+    elements = elements_self + elements_others
     actions_list = []
     for element in elements:
         for key, value in action_dict.items():
@@ -307,9 +320,9 @@ def get_availible_locations() -> list:
     """Получить список переходов на локации"""
 
     try:
-        elements = WebDriverWait(driver, 5).until(expected_conditions.
-                                                  visibility_of_all_elements_located
-                                                  ((By.XPATH, "//span[@class='move_name']")))
+        elements = WebDriverWait(driver, 30).until(expected_conditions.
+                                                   visibility_of_all_elements_located
+                                                   ((By.XPATH, "//span[@class='move_name']")))
     except TimeoutException:
         if is_cw3_disabled():
             refresh()
@@ -328,21 +341,29 @@ def get_availible_locations() -> list:
     return location_list
 
 
-def print_cats():
-    """Вывести список игроков на одной локации с вами"""
-
-    elements = driver.find_elements(By.XPATH, "//span[@class='cat_tooltip']/u/*")
+def get_cats_list():
+    """Получить список игроков на одной локации с вами"""
+    elements = driver.find_elements(By.XPATH, "//span[@class='cat_tooltip']/u/a")
     cats_list = []
     for element in elements:
         try:
             cats_list.append(element.get_attribute(name="innerText"))
         except StaleElementReferenceException:
-            print("\t\tencountered stale element, retrying print_cats call...")
+            print("\t\tencountered stale element!...")
+    return cats_list
+
+
+def print_cats():
+    """Вывести список игроков на одной локации с вами"""
+
+    cats_list = get_cats_list()
     if cats_list:
         print("Коты на локации:")
         for i in range(len(cats_list)):
             if not i % 5:
                 print("\t\t" + ", ".join(cats_list[i:i + 5]))
+    else:
+        print("Других котов на локации нет.")
 
 
 def info():
@@ -454,13 +475,19 @@ def get_next_index(length, index=-1, direction=1):
     return index, direction
 
 
+def multi_comm_handler(multi_comm: str):
+    if not multi_comm:
+        return print("Введите команду! Пример: patrol Морозная поляна - Каменная гряда")
+    elif multi_comm in alias_dict.keys():
+        return comm_handler(alias_dict[multi_comm])
+
+    multi_comm_list: list = multi_comm.split("; ")
+    for comm in multi_comm_list:
+        comm_handler(comm)
+
+
 def comm_handler(comm: str):
     """Разделить ключевое слово команды и аргументы"""
-
-    if not comm:
-        return print("Введите команду! Пример: patrol Морозная поляна - Каменная гряда")
-    elif comm in alias_dict.keys():
-        return comm_handler(alias_dict[comm])
 
     try:
         main_comm = comm.split(" ")[0]
@@ -553,12 +580,11 @@ def crash_handler(exception_type: Exception):
     path = os.path.dirname(__file__)
     if not os.path.exists(f"{path}/crashlogs"):
         os.mkdir(f"{path}/crashlogs")
-    filename = os.path.join(path, f"crashlogs/crash-{crash_time}.txt")
-    print(f"Кликер вылетел, exception: {type(exception_type).__name__}. Крашлог находится в папке crashlogs и "
-          f"называется {filename}")
-    with open(filename, "w") as crashlog:
+    crash_path = os.path.join(path, f"crashlogs/crash-{crash_time}.txt")
+    print(f"Кликер вылетел, exception: {type(exception_type).__name__}. Крашлог находится по пути {crash_path}")
+    with open(crash_path, "w") as crashlog:
         stacktrace = traceback.format_exc()
-        crashlog.writelines(["---CHRONOCLICKER CRASHLOG---", "\n", "time:", crash_time, "\n", stacktrace])
+        crashlog.writelines(["---CHRONOCLICKER CRASHLOG---", "\n", "time: ", crash_time, "\n", stacktrace])
 
 
 def comm_help():
@@ -580,7 +606,7 @@ def jump_to_cage(cage_index=None):
     try:
         row, column = int(cage_index[0]), int(cage_index[1])
     except (IndexError, ValueError):
-        print("jump row - column")
+        print("jump ряд - клетка")
         return
     if row > 6 or row < 0 or column < 0 or column > 10:
         print("invalid cage index!")
@@ -593,17 +619,248 @@ def jump_to_cage(cage_index=None):
     click(xpath=xpath, offset_range=(40, 70))
 
 
-def is_cat_in_action(cat_id: int) -> bool:
-    element = locate(f"//select[@id='mit']/option[@value='{cat_id}']")
-    element.submit()
-    time.sleep(random.uniform(0.1, 0.5))
-    click(xpath="//input[@id='mitok']")
-    time.sleep(random.uniform(0.1, 0.5))
-    click(xpath="//img[@src='actions/9.png']")
-    time.sleep(random.uniform(0.5, 2))
-    result = cancel()
-    print(result)
-    return result
+def is_cat_in_action(cat_name: str) -> bool:
+    selector = locate(xpath="//*[@id='mit']")
+    dropdown_object = Select(selector)
+
+    options_list = selector.find_elements(By.XPATH, "//option")
+    names_list = [i.text for i in options_list]
+    if cat_name in names_list:
+        dropdown_object.select_by_visible_text(cat_name)
+        time.sleep(0.5)
+        click(xpath="//*[@id='mitok']")
+        time.sleep(0.5)
+        click(xpath="//img[@src='actions/9.png']")
+        time.sleep(random.uniform(1, 2))
+        result = cancel()
+        print(result)
+        return result
+
+
+def wait_for(seconds=None):
+    if not seconds or seconds == [""] or len(seconds) > 2:
+        print("invalid seconds count")
+    try:
+        seconds[0], seconds[1] = int(seconds[0]), int(seconds[1])
+    except (IndexError, ValueError):
+        print("wait seconds_from - seconds_to")
+        return
+    seconds: float = random.uniform(int(seconds[0]), int(seconds[1]))
+    time.sleep(seconds)
+
+
+def start_rabbit_game():
+    driver.get("https://catwar.su/chat")
+    time.sleep(random.uniform(1, 3))
+
+    games_played = 0
+    while games_played != 4:
+        success = rabbit_game()
+        if success:
+            games_played += 1
+        else:
+            print("not success, breaking")
+            break
+
+
+def rabbit_game(lower_bound=-9999999999, upper_bound=9999999999) -> bool:
+    """max 35 guesses"""
+
+    chatbox: WebElement = locate("//div[@id='mess']")
+    submit_button: WebElement = locate(xpath="//input[@id='mess_submit']")
+
+    timestamp = locate(xpath="//td[@class='time_td']/span").get_attribute("title")
+    delta = datetime.datetime.now() - datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+    if delta.seconds > 60:
+        type_in_chat(text=f"/number 0", entry_element=chatbox)
+        click(given_element=submit_button)
+        time.sleep(random.uniform(1.5, 3))
+        rabbit_game(lower_bound, upper_bound)
+
+    guess = (upper_bound + lower_bound) // 2
+
+    time.sleep(random.uniform(0.2, 0.5))
+    last_message = locate(xpath="//div[@class='mess_div']/div[@class='parsed']").text
+
+    if "Меньше" in last_message:
+        upper_bound = guess
+    elif "Больше" in last_message:
+        lower_bound = guess
+    elif "это" in last_message:
+        print("+4 кроля!")
+        return True
+    else:
+        print(f"Произошла ошибка при парсинге сообщения с текстом {last_message}")
+        return False
+
+    type_in_chat(text=f"/number {guess}", entry_element=chatbox)
+    click(given_element=submit_button)
+    print(last_message)
+    print(f"({lower_bound}, {upper_bound})\n")
+    time.sleep(random.uniform(1.5, 3))
+    rabbit_game(lower_bound, upper_bound)
+
+
+def type_in_chat(text: str, entry_element: WebElement):
+    text = list(text)
+    for i in range(len(text)):
+        entry_element.send_keys(text[i])
+        if text[i - 1] == text[i]:
+            time.sleep(random.uniform(0, 0.1))
+            continue
+        time.sleep(random.uniform(0, 0.3))
+    if len(text) < 5:
+        time.sleep(random.uniform(1, 3))
+
+
+def cat_event(locations_checked=None):
+    if locations_checked is None:
+        locations_checked = []
+    locations = get_availible_locations()
+    current_location = locate("//span[@id='location']").text
+    if current_location in locations_checked:
+        go(random.sample(locations, 1))
+        cat_event(locations_checked)
+
+    free_cages = driver.find_elements(By.XPATH, "//td[@class='cage']/div[@class='cage_items' and not(*)]/..")
+    cats_unchecked = get_cats_list()
+
+    for cage in free_cages:
+        click(given_element=cage)
+        time.sleep(random.uniform(3, 5))
+        cats_checked = event_action_with_cat(cats_unchecked)
+        if cats_checked:
+            cats_unchecked = [i for i in cats_unchecked if i not in cats_checked]
+    locations_checked.append(current_location)
+    cat_event(locations_checked)
+
+
+def event_action_with_cat(cats_unchecked: list) -> list:
+    selector = locate(xpath="//*[@id='mit']")
+    dropdown_object = Select(selector)
+
+    options_list = selector.find_elements(By.XPATH, "//option")
+    names_list = [i.text for i in options_list]
+    cats_checked = []
+
+    for i in range(1, len(names_list)):
+        try:
+            if names_list[i] not in cats_unchecked:
+                continue
+            dropdown_object.select_by_visible_text(names_list[i])
+            time.sleep(0.5)
+            click(xpath="//*[@id='mitok']")
+            time.sleep(0.5)
+            do(["Поискать зацепки"])
+            cats_checked.append(names_list[i])
+        except (StaleElementReferenceException, ValueError):
+            print("!!!!!!!! stale or value error")
+            time.sleep(30)
+            event_action_with_cat(cats_unchecked)
+        except NoSuchElementException:
+            print("no element?(")
+            continue
+        return cats_checked
+
+
+def cat_search(names_to_search: list, forbidden_locations=("Таёжная тропа", "Обитель духов", "Морозная поляна")):
+    # locations_checked = []
+    cats_list = get_cats_list()
+    for name in names_to_search:
+        if name in cats_list:
+            cat_element = locate(
+                xpath=f"//span[@class='cat_tooltip']/u/a[text()='{name}']/../../preceding-sibling::*/*[1]")
+            s = cat_element.get_attribute("style")
+            url = re.findall(r'url\(\"(.*?)\.png', s)[0]
+            url = "https://catwar.su/" + url + ".png"
+            current_location = locate("//span[@id='location']").text
+            print(
+                f"\n\t\t\t !!! НАЙДЕН ИГРОК по имени {name}, ссылка на окрас: {url}, на локации {current_location} !!!")
+            names_to_search.remove(name)
+            if not names_to_search:
+                return
+    locations = get_availible_locations()
+    location_headed = random.sample(locations, 1)
+    while location_headed[0] in forbidden_locations:
+        location_headed = random.sample(locations, 1)
+    go(location_headed)
+    cat_search(names_to_search)
+
+
+def parse_top_args(args=None):
+    if not args or len(args) != 4:
+        print("Ошибка при парсинге аргумента.")
+        return
+    moons_start = 0 if args[0] == "?" else int(args[0])
+    moons_end = 9999 if args[1] == "?" else int(args[1])
+    gender, activity = args[2], args[3]
+    search_cat_in_top(search_gender=gender, search_activity=activity, moons_from=moons_start, moons_to=moons_end)
+
+
+def search_cat_in_top(search_gender="?", search_activity="?", moons_from=0, moons_to=9999):
+    """ page_index = len(options_list) // 2
+    change_top_page(page_index)"""
+
+    driver.get("https://catwar.su/top")
+    now = datetime.datetime.now()
+    gender = search_gender
+
+    driver.implicitly_wait(0)
+
+    all_entries = driver.find_elements(By.XPATH, "//tr")
+    count = 0
+    wait = WebDriverWait(driver, 5)
+    selector = locate(xpath="//select[@id='page']")
+    options_list = selector.find_elements(By.XPATH, "//option")
+    for j in range(1, len(options_list)):
+        change_top_page(j)
+        for i in range(2, len(all_entries)):
+            if gender != "?":
+                element = locate(xpath=f"//tbody/tr[{i}]/td[1]/a[@class='pol{gender}']")
+                if not element:
+                    continue
+                wait.until(expected_conditions.none_of(expected_conditions.staleness_of(element)))
+                name = element.text
+                url = element.get_attribute("href")
+            else:
+                element = locate(xpath=f"//tbody/tr[{i}]/td[1]/a")
+                wait.until(expected_conditions.none_of(expected_conditions.staleness_of(element)))
+                name = element.text
+                url = element.get_attribute("href")
+
+            moons = 0
+            if moons_to != 9999 or moons_from:
+                reg = datetime.datetime.strptime(locate(xpath=f"//tr[{i}]/td[2]").text, '%Y-%m-%d %H:%M:%S')
+                moons = (now - reg).days // 4
+                if moons > moons_to:
+                    break
+
+            activity = locate(xpath=f"//tr[{i}]/td[3]").text
+            is_match = True
+            if moons in range(moons_from, moons_to):
+                is_match = False if activity.lower() != search_activity and search_activity != "?" else is_match
+                is_match = False if gender != search_gender and search_gender != "?" else is_match
+                if not is_match:
+                    continue
+                if is_match:
+                    count += 1
+                    print(f"Найден игрок по имени {name}, ссылка: {url}")
+    print(f"\t\tВсего найдено {count} совпадений.")
+    driver.implicitly_wait(settings["max_waiting_time"])
+    driver.get("https://catwar.su/cw3/")
+
+
+def change_top_page(page_index: int):
+    selector = locate(xpath="//select[@id='page']")
+    while not selector:
+        selector = locate(xpath="//select[@id='page']")
+    dropdown_object = Select(selector)
+    button = locate(xpath="//form/input[@type='submit']")
+
+    dropdown_object.select_by_value(str(page_index))
+    time.sleep(random.uniform(0.2, 0.5))
+    click(given_element=button)
+    time.sleep(random.uniform(0.1, 0.3))
 
 
 comm_dict = {"patrol": patrol,
@@ -638,6 +895,11 @@ comm_dict = {"patrol": patrol,
              # cancel
              "jump": jump_to_cage,
              # jump row - column
+             "wait": wait_for,
+             "rabbit_game": start_rabbit_game,
+             "investigate": cat_event,
+             "parse_top": parse_top_args,
+             ""
              """             "fight": fight_mode,
              # fight
              "turn": turn_arrow,
@@ -670,9 +932,10 @@ if __name__ == "__main__":
     print("Настройки загружены...")
 
     if settings["is_headless"] == "True":
-        print("Запуск в фоновом режиме...")
+        print("Запуск в фоновом режиме... Может занять некоторое время.")
         options.add_argument("--headless")
 
+    print("Вебдрайвер запускается, может занять некоторое время...")
     if settings["driver_path"]:
         driver_path = settings["driver_path"]
         service = Service(driver_path)
@@ -694,6 +957,8 @@ if __name__ == "__main__":
     print(f"Игровая загружается, если прошло более {settings['max_waiting_time']} секунд - перезапустите кликер.")
     driver.get("https://catwar.su/cw3/")  # vibecheck https://bot.sannysoft.com/
 
+    """build: pyinstaller --onefile --add-data=config.json main.py"""
+
     if driver.current_url != "https://catwar.su/cw3/":
         print("Для включения кликера вам необходимо залогиниться в варовский аккаунт.\n"
               "ВНИМАНИЕ: все ваши данные (почта и пароль) сохраняются в папке selenium, она создаётся \n"
@@ -701,13 +966,14 @@ if __name__ == "__main__":
               "для работы кликера нужен только main.py и config.json.\n"
               "Все команды кликера работают ИЗ ИГРОВОЙ!")
     else:
+        pass
         info()
 
     try:
         while True:
             command = input(">>> ")
             if command != "q":
-                comm_handler(command)
+                multi_comm_handler(command)
             else:
                 break
     except Exception as exception:

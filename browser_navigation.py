@@ -203,6 +203,8 @@ class DriverWrapper(WebDriver):
 
         tooltip_elem = self.locate_element("//div[@id='tiptip_content']")
         level_elem = self.locate_element(f"//table[@id='{skill_name}_table']", do_wait=False)
+        if not level_elem:
+            return ""
         self.mouse_over(xpath=f"//span[@id='{skill_name}']/*/*/*/descendant::*")
         if not tooltip_elem.text:
             self.mouse_over(xpath=f"//span[@id='{skill_name}']/*/*/*/descendant::*", hover_for=0.01)

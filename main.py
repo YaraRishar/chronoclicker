@@ -4,6 +4,7 @@ import time
 import random
 import re
 
+from selenium.webdriver import Keys
 from urllib3.exceptions import ProtocolError
 
 import browser_navigation
@@ -134,8 +135,9 @@ def info():
           f"\t Здоровье:\t{driver.check_parameter('health')}%\n"
           f"\t Чистота: \t{driver.check_parameter('clean')}%")
     print("Последние 5 записей в истории (введите hist, чтобы посмотреть полную историю):")
-    hist_list = driver.locate_element("//span[@id='ist']").text.split('.')[-6:-1]
-    print(f"\t{'.\n\t'.join(hist_list)}.")
+    # hist_list = driver.locate_element("//span[@id='ist']").text.split('.')[-6:-1]
+    hist_list = get_hist_list()
+    print(f"\t{'.\n\t'.join(hist_list[-6:])}.")
 
 
 def char():
@@ -156,7 +158,8 @@ def char():
           f"{driver.check_skill('dig')}\n"
           f"{driver.check_skill('swim')}\n"
           f"{driver.check_skill('might')}\n"
-          f"{driver.check_skill('tree')}")
+          f"{driver.check_skill('tree')}\n"
+          f"{driver.check_skill('observ')}")
 
 
 def hist():
@@ -164,9 +167,14 @@ def hist():
     hist"""
 
     print("История:")
-    hist_list = driver.locate_element("//span[@id='ist']").text.split(".")[:-1]
+    hist_list = get_hist_list()
     for item in hist_list:
         print(item)
+
+
+def get_hist_list() -> list:
+    hist_list = driver.locate_element("//span[@id='ist']").text.split(".")[:-1]
+    return hist_list
 
 
 def clear_hist():
@@ -298,7 +306,7 @@ def wait_for(seconds=None):
      seconds: list = [seconds_start, seconds_end]"""
 
     if not seconds or seconds == [""] or len(seconds) > 2:
-        print("invalid seconds count")
+        print("Введите количество секунд")
     try:
         seconds[0], seconds[1] = int(seconds[0]), int(seconds[1])
     except (IndexError, ValueError):
@@ -335,13 +343,17 @@ def get_inv_items() -> list:
 
     inv_elements = driver.locate_elements(xpath="//div[@class='itemInMouth']/img")
     inv_ids = []
-    print("Предметы во рту:")
     for element in inv_elements:
         style_str = element.get_attribute("src")
-        inv_ids.append(re.findall(pattern=r"things\/(\d*)", string=style_str)[0])
-        print(f"https://catwar.su/cw3/things/{inv_ids[-1]}.png")
-
+        inv_ids.append(int(re.findall(pattern=r"things\/(\d*)", string=style_str)[0]))
     return inv_ids
+
+
+def print_inv():
+    inv_ids = get_inv_items()
+    print("Предметы во рту:")
+    for i in inv_ids:
+        print(f"https://catwar.su/cw3/things/{i}.png")
 
 
 def end_session():
@@ -409,11 +421,45 @@ def comm_handler(comm: str):
     return comm_dict[main_comm](args)
 
 
+def bury_item(args=None):
+    """ bury 123 - 3 """
+
+    if args is None or args == [""] or len(args) not in range(1, 3):
+        print("Чтобы закопать предмет, введите айди его картинки и глубину закапывания.")
+        return
+    try:
+        level = 1 if len(args) == 1 else int(args[1])
+        level = 9 if level > 9 else level
+        item_img_id = int(args[0])
+    except ValueError:
+        print("bury id_img - level")
+        return
+    inv_items = get_inv_items()
+    if item_img_id not in inv_items:
+        print(f"Предмета с айди {item_img_id} нет в инвентаре! Ссылка на изображение: "
+              f"https://catwar.su/cw3/things/{item_img_id}.png")
+        return
+    driver.click(xpath=f"//div[@class='itemInMouth']/img[@src='things/{item_img_id}.png']", offset_range=(10, 10))
+    time.sleep(random.uniform(0.3, 0.6))
+    if level != 1:
+        slider = driver.locate_element(xpath="//div[@id='layer']/"
+                                             "span[@class='ui-slider-handle ui-state-default ui-corner-all']")
+        driver.click(given_element=slider)
+        while level != 1:
+            time.sleep(random.uniform(0.1, 0.5))
+            slider.send_keys(Keys.ARROW_RIGHT)
+            level -= 1
+    driver.click(xpath="//a[text()='Закопать']")
+    seconds = driver.check_time() + random.uniform(driver.short_break_duration[0], driver.short_break_duration[1])
+    hist_list = get_hist_list()
+    clicker_utils.print_timer(console_string=f"{hist_list[-1].lstrip()}", seconds=seconds)
+
+
 class Cage:
     def __init__(self, row: int, column: int):
         row, column = int(row), int(column)
         if row not in range(1, 7) or column not in range(1, 11):
-            print("invalid cage coordinates!")
+            print("Неверные координаты клетки!")
             return
 
         self.row = row
@@ -488,7 +534,7 @@ class Cage:
                                              f"/span/span/span[@class='cat_tooltip']/ol/li/img", do_wait=False)
         item_ids = []
         for element in items:
-            item_ids.append(re.findall(pattern=r"things\/(\d*)", string=element.get_attribute("src"))[0])
+            item_ids.append(int(re.findall(pattern=r"things\/(\d*)", string=element.get_attribute("src"))[0]))
         return item_ids
 
     def get_cat_status(self) -> str:
@@ -572,11 +618,14 @@ comm_dict = {"patrol": patrol,
              # rabbit_game number_of_games_to_play
              "balance": print_rabbits_balance,
              # balance
-             "inv": get_inv_items,
+             "inv": print_inv,
              # inv
-             "cage": print_cage_info,
+             "c": print_cage_info,
              # cage row - column
              "q": end_session,
+             # q
+             "bury": bury_item,
+             # bury item_img_id - level
              }
 
 if __name__ == "__main__":

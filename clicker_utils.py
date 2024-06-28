@@ -7,6 +7,22 @@ import time
 import traceback
 
 
+def print_timer(console_string: str, seconds: float):
+    for i in range(round(seconds), -1, -1):
+        sys.stdout.write(f"\r{console_string}. Осталось {i // 60} мин {i % 60} с.")
+        sys.stdout.flush()
+        time.sleep(1)
+    sys.stdout.write("\n")
+
+
+def trigger_long_break(long_break_chance: float, long_break_duration: list):
+    """ Включение долгого перерыва после действия/перехода """
+
+    if random.random() < long_break_chance:
+        seconds = random.uniform(long_break_duration[0], long_break_duration[1])
+        print_timer(console_string="Начался долгий перерыв", seconds=seconds)
+
+
 def get_next_index(length, index=-1, direction=1):
     """Получить индекс следующей локации в патруле"""
 
@@ -20,22 +36,8 @@ def get_next_index(length, index=-1, direction=1):
     return index, direction
 
 
-def print_timer(console_string: str, seconds: float):
-    for i in range(round(seconds), -1, -1):
-        sys.stdout.write(f"\r{console_string}. Осталось {i // 60} мин {i % 60} с.")
-        sys.stdout.flush()
-        time.sleep(1)
-    sys.stdout.write("\n")
-
-
-def trigger_long_break(long_break_chance: float, long_break_duration: list):
-    if random.random() < long_break_chance:
-        seconds = random.uniform(long_break_duration[0], long_break_duration[1])
-        print_timer(console_string="Начался долгий перерыв", seconds=seconds)
-
-
 def load_config() -> dict:
-    """Загрузить файл настроек config.json"""
+    """ Загрузить файл настроек config.json """
 
     try:
         with open("config.json", "r", encoding="utf-8") as file:
@@ -48,18 +50,17 @@ def load_config() -> dict:
 
 
 def rewrite_config(new_config: dict):
-    """Обновить файл настроек config.json при их изменении"""
+    """ Обновить файл настроек config.json при их изменении """
 
-    with open("config.json", "w") as file:
+    with open("config.json", "w", encoding="utf-8") as file:
         file.write(json.dumps(new_config, ensure_ascii=False, indent=4))
     print("Настройки обновлены!")
 
 
 def crash_handler(exception_type: Exception):
-    """Создать крашлог в папке crashlogs, которая находится на том же уровне, что и main.py"""
+    """ Создать крашлог в папке crashlogs, которая находится на том же уровне, что и main.py """
 
-    if type(exception_type).__name__ == "KeyboardInterrupt":
-        return
+    print("crash handler called!")
     now = datetime.datetime.now()
     crash_time = now.strftime("%y-%m-%d_%H.%M.%S")
     path = os.path.dirname(__file__)

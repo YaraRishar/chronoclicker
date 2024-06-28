@@ -1,10 +1,10 @@
 import os.path
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.select import Select
 import time
 import random
 import re
+
+from urllib3.exceptions import ProtocolError
 
 import browser_navigation
 import clicker_utils
@@ -15,25 +15,29 @@ def repeat(args=None):
     repeat действие1 - действие2 - действие3"""
 
     if not args or args == [""]:
-        print("Для зацикленного действия нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
+        print("Для зацикленного действия нужны аргументы. Наберите help для вывода дополнительной информации.")
         return
     while True:
-        do(args)
+        do(args, show_avaliables=False)
         clicker_utils.trigger_long_break(long_break_chance=settings["long_break_chance"],
                                          long_break_duration=settings["long_break_duration"])
 
 
-def do(args=None):
+def do(args=None, show_avaliables=True):
     """Команда для исполнения последовательности действий 1 раз. Использование:
     do действие1 - действие2 - действие3"""
 
     if not args or args == [""]:
-        print("Для действия нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
+        print("Для действия нужны аргументы. Наберите help для вывода дополнительной информации.")
         return
     for action in args:
         availible_actions = driver.get_availible_actions(action_dict)
         if driver.is_action_active():
-            print("Действие уже совершается! Чтобы отменить, введите cancel.")
+            action_active_sec = driver.check_time()
+            print(f"Действие уже совершается! Чтобы отменить, введите cancel.\n"
+                  f"(До окончания действия осталось {action_active_sec // 60} мин {action_active_sec % 60} сек)")
+            if not show_avaliables:
+                wait_for([action_active_sec, action_active_sec + driver.short_break_duration[1]])
             return
         if action not in availible_actions:
             print(f"Действие {action} не может быть выполнено. Возможно, действие недоступно/"
@@ -55,7 +59,9 @@ def do(args=None):
                 print(driver.check_skill("dig"))
             elif action == "Поплавать":
                 print(driver.check_skill("swim"))
-            print(f"Доступные действия: {', '.join(driver.get_availible_actions(action_dict))}")
+
+            if show_avaliables:
+                print(f"Доступные действия: {', '.join(driver.get_availible_actions(action_dict))}")
         else:
             continue
 
@@ -66,15 +72,15 @@ def patrol(args=None):
     patrol имя_локации1 - имя_локации2 - имя_локации3"""
 
     if not args or args == [""]:
-        print("Для перехода нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
+        print("Для перехода нужны аргументы. Наберите help для вывода дополнительной информации.")
         return
     if len(args) == 1:
         while True:
-            driver.move_to_location(args[0])
+            driver.move_to_location(args[0], show_availibles=False)
     index, direction = -1, 1
     while True:
         index, direction = clicker_utils.get_next_index(len(args), index, direction)
-        success = driver.move_to_location(args[index])
+        success = driver.move_to_location(args[index], show_availibles=False)
         if not success:
             continue
 
@@ -84,17 +90,17 @@ def go(args=None):
     go имя_локации1 - имя_локации2 - имя_локации3"""
 
     if not args or args == [""]:
-        print("Для перехода нужны аргументы. Наберите comm_help для вывода дополнительной информации.")
+        print("Для перехода нужны аргументы. Наберите help для вывода дополнительной информации.")
         return
     for index in range(len(args)):
-        success = driver.move_to_location(args[index])
-        # build_map()
+        success = driver.move_to_location(args[index], show_availibles=True)
         if not success:
             continue
 
 
 def start_rabbit_game():
-    """ Начать игру в числа с Лапом, после 5 игр вернуться в cw3 """
+    """ Начать игру в числа с Лапом, после 5 игр вернуться в cw3. Использование:
+     rabbit_game"""
 
     driver.get("https://catwar.su/chat")
     time.sleep(random.uniform(1, 3))
@@ -145,7 +151,7 @@ def char():
     print(f"Луны: {driver.locate_element('''//div[@id='pr']/table/tbody/tr[2]/td[2]/b''').text}\n"
           f"ID: {driver.locate_element('''//b[@id='id_val']''').text}\n"
           f"Активность: {driver.locate_element('''//div[@id='act_name']/b''').text}")
-    driver.get("https://catwar.su/cw3/")
+    driver.back()
     print(f"{driver.check_skill('smell')}\n"
           f"{driver.check_skill('dig')}\n"
           f"{driver.check_skill('swim')}\n"
@@ -183,27 +189,29 @@ def cancel() -> bool:
     return False
 
 
-def swim(escape_to_location=""):
-    """Команда для плавания с отсыпом на соседней локации. Критическое количество пикселей сна (при
+def swim(escape_to_location=None):
+    """ Команда для плавания с отсыпом на соседней локации. Критическое количество пикселей сна (при
     котором начнётся отсып) указывается в настройках. Для справки:
     20 пикс. = ~43 минуты сна, 30 пикс. = ~40 минут сна. Считаются 'оставшиеся' зелёные пиксели.
     ВНИМАНИЕ: перед использованием этой команды проверьте на безопасной ПУ локации,
     работает ли она на вашем устройстве.
     Использование (находясь на локации с ПУ):
-    swim локация_для_отсыпа"""
+    swim локация_для_отсыпа """
 
-    availible_locations = driver.get_availible_actions(action_dict)
-    if escape_to_location and escape_to_location not in availible_locations:
-        print("Для отсыпа введите название локации, соседней с плавательной!")
-    elif not escape_to_location:
+    if not escape_to_location:
         repeat(["Поплавать"])
+    availible_locations = driver.get_availible_locations()
+    if escape_to_location[0] and escape_to_location[0] not in availible_locations:
+        print("Для отсыпа введите название локации, соседней с плавательной!")
+        return
     while True:
         sleep_pixels = driver.check_parameter("dream")
+        print(f"Сон: {sleep_pixels} зелёных пикселей.")
         if sleep_pixels < settings["critical_sleep_pixels"]:
             current_location = driver.locate_element("//span[@id='location']").text
-            driver.move_to_location(escape_to_location)
+            go(escape_to_location)
             do(["Поспать"])
-            driver.move_to_location(current_location)
+            go([current_location])
         do(["Поплавать"])
 
 
@@ -233,16 +241,20 @@ def create_alias(comm):
 
 def refresh():
     """Перезагрузить страницу"""
+
     driver.refresh()
     print("Страница обновлена!")
 
 
-def change_settings(args=()):
+def change_settings(args=None):
     """Команда для изменения настроек. Использование:
     settings key - value
     (Пример: settings is_headless - True)"""
 
-    if not args or len(args) > 2:
+    if not args:
+        print(config["settings"])
+        return
+    if len(args) != 2:
         print("Ошибка в парсинге аргумента.")
         return
     key, value = args
@@ -267,6 +279,7 @@ def jump_to_cage(cage_index=None):
     try:
         row, column = int(cage_index[0]), int(cage_index[1])
     except (IndexError, ValueError):
+        print(cage_index)
         print("jump ряд - клетка")
         return
     if row not in range(1, 7) or column not in range(1, 11):
@@ -292,7 +305,7 @@ def wait_for(seconds=None):
         print("wait seconds_from - seconds_to")
         return
     seconds: float = random.uniform(int(seconds[0]), int(seconds[1]))
-    time.sleep(seconds)
+    clicker_utils.print_timer(console_string="Начато ожидание", seconds=seconds)
 
 
 def text_to_chat(message=None):
@@ -306,28 +319,9 @@ def text_to_chat(message=None):
     driver.click(xpath="//*[@id='msg_send']")
 
 
-def is_cat_in_action(cat_name: str) -> bool:
-    """ Проверка кота на действие (потереться носом о нос и отменить действие)
-     result = True -> кот занят действием """
-
-    selector = driver.locate_element(xpath="//*[@id='mit']")
-    dropdown_object = Select(selector)
-
-    options_list = selector.find_elements(By.XPATH, "//option")
-    names_list = [i.text for i in options_list]
-    if cat_name in names_list:
-        dropdown_object.select_by_visible_text(cat_name)
-        time.sleep(0.5)
-        driver.click(xpath="//*[@id='mitok']")
-        time.sleep(0.5)
-        driver.click(xpath="//img[@src='actions/9.png']")
-        time.sleep(random.uniform(1, 2))
-        result = cancel()
-        print(result)
-        return result
-
-
 def print_rabbits_balance():
+    """ Вывести баланс кролей игрока """
+
     driver.get("https://catwar.su/rabbit")
     rabbit_balance = driver.locate_element(xpath="//img[@src='img/rabbit.png']/preceding-sibling::b").text
     wait_for([0.5, 1.5])
@@ -337,6 +331,8 @@ def print_rabbits_balance():
 
 
 def get_inv_items() -> list:
+    """ Получить список id изображений всех предметов в инвентаре """
+
     inv_elements = driver.locate_elements(xpath="//div[@class='itemInMouth']/img")
     inv_ids = []
     print("Предметы во рту:")
@@ -349,29 +345,40 @@ def get_inv_items() -> list:
 
 
 def end_session():
+    """ Завершить текущую сессию и закрыть вебдрайвер. Использование:
+     q """
+
+    print("\nВебдрайвер закрывается...")
     driver.quit()
 
 
 def print_readme():
+    """ Вывести содержимое файла README.md или ссылку на него. Использование:
+     help """
+
     if not os.path.exists("README.md"):
         print("Файла справки README.md не существует или он удалён.\n"
               "Справка на GitHub: https://github.com/YaraRishar/chronoclicker?tab=readme-ov-file#chronoclicker")
         return
-    with open("README.md", "r") as readme:
+    with open("README.md", "r", encoding="utf-8") as readme:
         for line in readme:
             print(line, end="")
 
 
 def print_cage_info(args=()):
+    """ Вывести всю информацию о клетке в Игровой """
+
     cage = Cage(row=args[0], column=args[1])
     cage.pretty_print()
 
 
 def multi_comm_handler(multi_comm: str):
+    """ Исполнить каждую команду в мультикоманде по очереди """
+
     if not multi_comm:
         return print("Введите команду! Пример: patrol Морозная поляна - Каменная гряда")
     elif multi_comm in alias_dict.keys():
-        return comm_handler(alias_dict[multi_comm])
+        return multi_comm_handler(alias_dict[multi_comm])
 
     multi_comm_list: list = multi_comm.split("; ")
     first_word = multi_comm.split(" ")[0]
@@ -383,19 +390,19 @@ def multi_comm_handler(multi_comm: str):
 
 
 def comm_handler(comm: str):
-    """Разделить ключевое слово команды и аргументы"""
+    """ Разделить ключевое слово команды и аргументы """
 
     try:
         main_comm = comm.split(" ")[0]
         comm = comm.replace(main_comm + " ", "")
         args = comm.split(" - ")
     except IndexError:
-        return print("Ошибка в парсинге аргумента. Введите comm_help для просмотра списка команд.")
+        return print("Ошибка в парсинге аргумента. Введите help для просмотра списка команд.")
 
     if main_comm == "alias":
         return create_alias(comm)
     if main_comm not in comm_dict.keys():
-        return print("Команда не найдена. Наберите comm_help для просмотра списка команд.")
+        return print("Команда не найдена. Наберите help для просмотра списка команд.")
 
     if comm == main_comm:
         return comm_dict[main_comm]()
@@ -548,7 +555,7 @@ comm_dict = {"patrol": patrol,
              "hist": hist,
              # hist
              "help": print_readme,
-             # comm_help
+             # help
              "clear_hist": clear_hist,
              # clear_hist
              "refresh": refresh,
@@ -567,10 +574,9 @@ comm_dict = {"patrol": patrol,
              # balance
              "inv": get_inv_items,
              # inv
-             "check_cat": is_cat_in_action,
-             # check_cat name
              "cage": print_cage_info,
              # cage row - column
+             "q": end_session,
              }
 
 if __name__ == "__main__":
@@ -589,20 +595,23 @@ if __name__ == "__main__":
     print(f"Игровая загружается, если прошло более {settings['max_waiting_time'] * 10} секунд - перезапустите кликер.")
     driver.get("https://catwar.su/cw3/")  # vibecheck https://bot.sannysoft.com/
 
-    """ build: pyinstaller --onefile --add-data=config.json main.py """
-
     if driver.current_url != "https://catwar.su/cw3/":
         print("Для включения кликера вам необходимо залогиниться в варовский аккаунт.\n"
               "ВНИМАНИЕ: все ваши данные (почта и пароль) сохраняются в папке selenium, она создаётся \n"
               "в той же папке, куда вы поместили этот скрипт (main.py). НЕ ОТПРАВЛЯЙТЕ НИКОМУ папку selenium, \n"
-              "для работы кликера нужен только main.py и config.json.\n"
+              "для работы кликера нужен main.py, browser_navigation.py, clicker_utils.py и config.json.\n"
               "Все команды кликера работают ИЗ ИГРОВОЙ!")
     else:
         info()
 
-while True:
+command = "null"
+while command != "q":
     command = input(">>> ")
-    if command != "q":
+    try:
         multi_comm_handler(command)
-    else:
+    except (KeyboardInterrupt, ProtocolError):
+        end_session()
         break
+    except Exception as exception:
+        print(type(exception).__name__)
+        clicker_utils.crash_handler(exception)

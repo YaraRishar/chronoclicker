@@ -1,4 +1,5 @@
 from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.webdriver.support.select import Select
 
 import clicker_utils
 from selenium import webdriver
@@ -7,12 +8,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.common.exceptions import (NoSuchElementException,
                                         MoveTargetOutOfBoundsException,
-                                        StaleElementReferenceException, TimeoutException)
+                                        StaleElementReferenceException)
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.actions.action_builder import ActionBuilder
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions
 import time
 import random
 import re
@@ -20,6 +19,7 @@ import datetime
 
 
 class DriverWrapper(WebDriver):
+    """ Обёртка для драйвера WebDriver из модуля selenium. """
 
     def __init__(self,
                  long_break_chance=0.05,
@@ -79,7 +79,7 @@ class DriverWrapper(WebDriver):
         self.implicitly_wait(max_waiting_time)
 
     def locate_element(self, xpath: str, do_wait=True) -> WebElement | None:
-        """Найти элемент на странице по xpath. """
+        """ Найти элемент на странице по xpath. """
 
         try:
             if not do_wait:
@@ -96,6 +96,8 @@ class DriverWrapper(WebDriver):
                 return None
 
     def locate_elements(self, xpath: str, do_wait=True) -> list[WebElement] | None:
+        """ Найти элемент на странице по xpath. """
+
         try:
             if not do_wait:
                 self.implicitly_wait(0)
@@ -111,7 +113,7 @@ class DriverWrapper(WebDriver):
                 return None
 
     def is_cw3_disabled(self) -> bool:
-        """Проверка на активность Игровой"""
+        """ Проверка на активность Игровой """
 
         try:
             cw3_disabled_element = self.find_element(By.XPATH, "//body[text()='Вы открыли новую вкладку с Игровой, "
@@ -127,7 +129,7 @@ class DriverWrapper(WebDriver):
         action_builder.perform()
 
     def click(self, xpath="xpath", offset_range=(0, 0), given_element=None) -> bool:
-        """Клик по элементу element с оффсетом offset_range.
+        """ Клик по элементу element с оффсетом offset_range.
         Возвращает True, если был совершён клик по элементу. """
 
         if xpath != "xpath" and not given_element:
@@ -160,7 +162,7 @@ class DriverWrapper(WebDriver):
         return True
 
     def mouse_over(self, xpath: str, hover_for=0.1) -> bool:
-        """Передвинуть курсор к элементу по xpath"""
+        """ Передвинуть курсор к элементу по xpath """
 
         element = self.locate_element(xpath)
         if not element or not element.is_displayed():
@@ -172,8 +174,8 @@ class DriverWrapper(WebDriver):
         return True
 
     def check_time(self) -> int:
-        """Проверить, сколько времени осталось до окончания действия.
-        Если никакое действие в данный момент не выполняется, возвращает 1."""
+        """ Проверить, сколько времени осталось до окончания действия.
+        Если никакое действие в данный момент не выполняется, возвращает 1. """
 
         element: WebElement = self.locate_element("//span[@id='sek']")
         if not element:
@@ -187,19 +189,19 @@ class DriverWrapper(WebDriver):
         return seconds
 
     def check_parameter(self, param_name) -> float | int:
-        """Проверить параметр param_name, вернуть его значение в процентах"""
+        """ Проверить параметр param_name, вернуть его значение в процентах """
 
         element = self.locate_element(f"//span[@id='{param_name}']/*/*/*/descendant::*")
         if not element:
             return -1
-        pixels = int(element.get_attribute("style").split("px")[0].split("width: ")[1])
+        pixels = float(element.get_attribute("style").split("px")[0].split("width: ")[1])
         percents = round(pixels / 150 * 100, 2)
         if percents == int(percents):
             return int(percents)
         return percents
 
     def check_skill(self, skill_name) -> str:
-        """Проверить уровень и дробь навыка"""
+        """ Проверить уровень и дробь навыка """
 
         tooltip_elem = self.locate_element("//div[@id='tiptip_content']")
         level_elem = self.locate_element(f"//table[@id='{skill_name}_table']", do_wait=False)
@@ -213,7 +215,7 @@ class DriverWrapper(WebDriver):
         return tooltip_elem.text + ", уровень " + level_elem.text
 
     def get_last_cw3_message(self) -> tuple:
-        """Получить последнее сообщение в чате Игровой и имя написавшего"""
+        """ Получить последнее сообщение в чате Игровой и имя написавшего """
 
         try:
             last_message = self.locate_element(xpath="//*[@id='chat_msg']/span[1]/table/tbody/tr/td[1]/span/span").text
@@ -223,7 +225,7 @@ class DriverWrapper(WebDriver):
         return last_message, name_from
 
     def monitor_cw3_chat(self, monitor_for: float):
-        """Выводить последние сообщения в чате Игровой, пока не истечёт время end_time"""
+        """ Выводить последние сообщения в чате Игровой, пока не истечёт время end_time """
 
         end_time = time.time() + monitor_for
         temp_message = ('', '')
@@ -248,15 +250,20 @@ class DriverWrapper(WebDriver):
         self.switch_to.window(cw3)
 
     def is_action_active(self) -> bool:
-        """Проверка на выволнение действия"""
+        """ Проверка на выволнение действия """
 
         element = self.locate_element(xpath="//a[@id='cancel']", do_wait=False)
         if element:
             return True
         return False
 
-    def move_to_location(self, location_name: str) -> bool:
-        """Техническая функция для перехода на локацию. """
+    def move_to_location(self, location_name: str, show_availibles=True) -> bool:
+        """ Техническая функция для перехода на локацию. """
+
+        if self.is_action_active():
+            seconds = self.check_time()
+            clicker_utils.print_timer(console_string="Действие уже совершается!", seconds=seconds)
+            return self.move_to_location(location_name, show_availibles)
 
         element = self.locate_element(
             f"//span[text()='{location_name.replace(" (о)", "")}' and @class='move_name']/preceding-sibling::*")
@@ -276,12 +283,14 @@ class DriverWrapper(WebDriver):
         seconds = self.check_time() + random.uniform(self.short_break_duration[0],
                                                      self.short_break_duration[1])
         clicker_utils.print_timer(console_string=f"Совершён переход в локацию {location_name}", seconds=seconds)
+        if show_availibles:
+            print(f"Доступные локации: {', '.join(self.get_availible_locations())}")
         clicker_utils.trigger_long_break(self.long_break_chance, self.long_break_duration)
 
         return has_moved
 
     def get_availible_actions(self, action_dict) -> list:
-        """Получить список доступных в данный момент действий"""
+        """ Получить список доступных в данный момент действий """
 
         elements_self = self.locate_elements(xpath="//div[@id='akten']/a[@class='dey']")
         elements_others = self.locate_elements(xpath="//div[@id='dein']/a[@class='dey']")
@@ -295,18 +304,9 @@ class DriverWrapper(WebDriver):
         return actions_list
 
     def get_availible_locations(self) -> list:
-        """Получить список переходов на локации"""
+        """ Получить список переходов на локации """
 
-        try:
-            elements = WebDriverWait(self, 30).until(expected_conditions.
-                                                     visibility_of_all_elements_located
-                                                     ((By.XPATH, "//span[@class='move_name']")))
-        except TimeoutException:
-            if self.is_cw3_disabled():
-                self.refresh()
-            elements = WebDriverWait(self, 5).until(expected_conditions.
-                                                    visibility_of_all_elements_located
-                                                    ((By.XPATH, "//span[@class='move_name']")))
+        elements = self.locate_elements(xpath="//span[@class='move_name']")
         location_list = []
         for element in elements:
             try:
@@ -330,7 +330,6 @@ class DriverWrapper(WebDriver):
 
         last_message = self.locate_element(xpath="//div[@class='mess_div']/div[@class='parsed']").text
         while not bool(last_message):
-            print("cant detect last message, trying again...")
             self.refresh()
             time.sleep(2)
             last_message = self.get_last_message()
@@ -352,7 +351,7 @@ class DriverWrapper(WebDriver):
             time.sleep(random.uniform(1, 3))
 
     def rabbit_game(self, lower_bound=-9999999999, upper_bound=9999999999) -> bool:
-        """max 35 guesses"""
+        """ Игра в числа """
 
         last_message = ""
         while "это" not in last_message:
@@ -385,12 +384,14 @@ class DriverWrapper(WebDriver):
                 return False
 
             print(last_message.split(", ")[0])
-            print(f"({lower_bound}, {upper_bound}), difference = {upper_bound - lower_bound}\n")
+            print(f"({lower_bound}, {upper_bound}), difference = {upper_bound - lower_bound}")
 
     def get_field_items(self) -> list:
         cages_with_items = self.locate_elements(xpath="//div[@style!='' and @class='cage_items']", do_wait=False)
         items_ids = []
 
+        if not cages_with_items:
+            return []
         print("Предметы на поле:")
         for element in cages_with_items:
             style_str = element.get_attribute("style")
@@ -424,4 +425,22 @@ class DriverWrapper(WebDriver):
                     print()
             except IndexError:
                 print()
-                pass
+
+    def is_cat_in_action(self, cat_name: str) -> bool:
+        """ Проверка кота на действие (потереться носом о нос и отменить действие)
+         result = True -> кот занят действием """
+
+        selector = self.locate_element(xpath="//*[@id='mit']")
+        dropdown_object = Select(selector)
+
+        options_list = selector.find_elements(By.XPATH, "//option")
+        names_list = [i.text for i in options_list]
+        if cat_name in names_list:
+            dropdown_object.select_by_visible_text(cat_name)
+            time.sleep(0.5)
+            self.click(xpath="//*[@id='mitok']")
+            time.sleep(0.5)
+            self.click(xpath="//img[@src='actions/9.png']")
+            time.sleep(random.uniform(1, 2))
+            result = self.click(xpath="//a[@id='cancel']")
+            return result

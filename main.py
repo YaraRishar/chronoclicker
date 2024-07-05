@@ -380,6 +380,9 @@ def print_readme():
 def print_cage_info(args=()):
     """ Вывести всю информацию о клетке в Игровой """
 
+    if not args or len(args) != 2:
+        print("c row - column")
+        return
     cage = Cage(row=args[0], column=args[1])
     cage.pretty_print()
 
@@ -496,6 +499,7 @@ class Cage:
             item_ids.append(re.findall(pattern=r"things\/(\d*)", string=style_str))
         except IndexError:
             return ()
+        item_ids = [int(i) for i in item_ids[0]]
         return item_ids
 
     def is_move(self) -> bool:
@@ -569,13 +573,12 @@ class Cage:
             print(f"Переход на локацию {self.move_name}")
             return
         if self.items:
-            items_string = [f"https://catwar.su/cw3/things/{i}.png" for i in self.items[0]]
+            items_string = [f"https://catwar.su/cw3/things/{i}.png" for i in self.items]
             print(f"Предметы на клетке: {", ".join(items_string)}")
         if self.cat_name:
             print(f"{self.cat_name}: {self.cat_rank} | {self.cat_status}\n"
                   f"Рост: {self.cat_size}%, ссылка на окрас: {self.cat_color_url}")
             if self.cat_items:
-                "https://catwar.su/cw3/things/3196"
                 items_string = [f"https://catwar.su/cw3/things/{i}.png" for i in self.cat_items]
                 print(f"Предметы во рту: {", ".join(items_string)}")
 

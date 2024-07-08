@@ -263,20 +263,18 @@ class DriverWrapper(WebDriver):
         if self.is_action_active():
             seconds = self.check_time()
             clicker_utils.print_timer(console_string="Действие уже совершается!", seconds=seconds)
-            return self.move_to_location(location_name, show_availibles)
-
-        element = self.locate_element(
-            f"//span[text()='{location_name.replace(" (о)", "")}' and @class='move_name']/preceding-sibling::*")
-        if not element:
             return False
-        else:
-            has_moved = self.click(
-                xpath=f"//span[text()='{location_name.replace(" (о)", "")}' "
-                      f"and @class='move_name']/preceding-sibling::*",
-                offset_range=(40, 70))
+        elements = self.locate_elements(f"//span[text()='{location_name.replace(" (о)", "")}' "
+                                        f"and @class='move_name']/preceding-sibling::*")
+        if not elements:
+            return False
+        random_element = random.sample(elements, 1)[0]
+        has_moved = self.click(given_element=random_element,
+                               offset_range=(40, 70))
         if " (о)" in location_name:
             seconds = random.uniform(0.5, 3)
-            clicker_utils.print_timer(console_string=f"Совершён переход в локацию {location_name}", seconds=seconds)
+            clicker_utils.print_timer(console_string=f"Совершён переход с отменой в локацию {location_name}",
+                                      seconds=seconds)
             self.click(xpath="//a[@id='cancel']")
             time.sleep(random.uniform(1, 3))
             return has_moved
@@ -285,7 +283,8 @@ class DriverWrapper(WebDriver):
         clicker_utils.print_timer(console_string=f"Совершён переход в локацию {location_name}", seconds=seconds)
         if show_availibles:
             print(f"Доступные локации: {', '.join(self.get_availible_locations())}")
-        clicker_utils.trigger_long_break(self.long_break_chance, self.long_break_duration)
+        else:
+            clicker_utils.trigger_long_break(self.long_break_chance, self.long_break_duration)
 
         return has_moved
 

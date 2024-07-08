@@ -1,12 +1,9 @@
-import os.path
-
 import time
 import random
 import re
-
+import os.path
 from selenium.webdriver import Keys
 from urllib3.exceptions import ProtocolError
-
 import browser_navigation
 import clicker_utils
 
@@ -275,30 +272,6 @@ def change_settings(args=None):
         print("Ошибка в парсинге аргумента.")
         return
     clicker_utils.rewrite_config(config)
-
-
-def jump_to_cage(cage_index=None):
-    """ Переместиться на клетку в Игровой
-     cage_index: list = [row, column]"""
-
-    if not cage_index or cage_index == [""]:
-        print("Введите ряд и клетку!")
-        return
-    try:
-        row, column = int(cage_index[0]), int(cage_index[1])
-    except (IndexError, ValueError):
-        print(cage_index)
-        print("jump ряд - клетка")
-        return
-    if row not in range(1, 7) or column not in range(1, 11):
-        print("Ряды от 1 до 6, клетки от 1 до 10")
-        return
-    xpath = f"//*[@id='cages']/tbody/tr[{row}]/td[{column}]/div"
-    cage_element = driver.locate_element(xpath=f"{xpath}/span[@class='move_parent']/span[@class='move_name']")
-    if cage_element:
-        driver.move_to_location(cage_element.text)
-        return
-    driver.click(xpath=xpath, offset_range=(40, 70))
 
 
 def wait_for(seconds=None):
@@ -582,6 +555,37 @@ class Cage:
                 items_string = [f"https://catwar.su/cw3/things/{i}.png" for i in self.cat_items]
                 print(f"Предметы во рту: {", ".join(items_string)}")
 
+    def jump(self):
+        if self.has_cat():
+            print(f"Клетка {self.row}x{self.column} занята котом по имени {self.cat_name}!")
+            return
+        elif self.has_move:
+            location_name = self.move_name
+            go([location_name])
+            return
+        driver.click(xpath=f"//*[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]", offset_range=(40, 70))
+        print(f"Прыжок на {self.row} ряд, {self.column} клетку.")
+
+
+# while true go to star steppe, get field items, if stardust found, jump to stardust cage
+
+
+def jump_to_cage(args=None):
+    if not args or len(args) != 2:
+        print("jump row - column")
+        return
+    cage = Cage(row=args[0], column=args[1])
+    cage.jump()
+
+
+def stardust_farm():
+    while True:
+        go(["Звёздная степь"])
+        for row in range(1, 7):
+            for column in range(1, 11):
+                cage = Cage(row=row, column=column)
+                items = cage.get_items()
+
 
 comm_dict = {"patrol": patrol,
              # patrol  location1 - locationN
@@ -667,3 +671,5 @@ while command != "q":
     except Exception as exception:
         print(type(exception).__name__)
         clicker_utils.crash_handler(exception)
+        end_session()
+        break

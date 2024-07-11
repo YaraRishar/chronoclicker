@@ -620,7 +620,7 @@ comm_dict = {"patrol": patrol,
              # cage row - column
              "q": end_session,
              # q
-             "bury": bury_item,
+             "bury": bury_handler,
              # bury item_img_id - level
              }
 

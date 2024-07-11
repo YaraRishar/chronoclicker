@@ -397,24 +397,37 @@ def comm_handler(comm: str):
     return comm_dict[main_comm](args)
 
 
-def bury_item(args=None):
-    """ bury 123 - 3 """
+def bury_handler(args=None):
+    """ Закопать предмет с айди картинки id на глубину level:
+    bury id - level
+    Закопать все предметы во рту на глубину level:
+    bury inv - level """
 
-    if args is None or args == [""] or len(args) not in range(1, 3):
+    if args is None or args == [""] or len(args) != 2:
         print("Чтобы закопать предмет, введите айди его картинки и глубину закапывания.")
         return
     try:
         level = 1 if len(args) == 1 else int(args[1])
         level = 9 if level > 9 else level
-        item_img_id = int(args[0])
+        item_img_id = args[0]
+        if item_img_id != "inv":
+            item_img_id = int(args[0])
     except ValueError:
-        print("bury id_img - level")
+        print("bury id_img - level или bury inv - level")
         return
     inv_items = get_inv_items()
+    if item_img_id == "inv":
+        for item in inv_items:
+            bury_item(item, level)
+            return
     if item_img_id not in inv_items:
         print(f"Предмета с айди {item_img_id} нет в инвентаре! Ссылка на изображение: "
               f"https://catwar.su/cw3/things/{item_img_id}.png")
         return
+    bury_item(item_img_id, level)
+
+
+def bury_item(item_img_id: str, level: int):
     driver.click(xpath=f"//div[@class='itemInMouth']/img[@src='things/{item_img_id}.png']", offset_range=(10, 10))
     time.sleep(random.uniform(0.3, 0.6))
     if level != 1:
@@ -567,15 +580,15 @@ class Cage:
         print(f"Прыжок на {self.row} ряд, {self.column} клетку.")
 
 
-# while true go to star steppe, get field items, if stardust found, jump to stardust cage
-
-
 def jump_to_cage(args=None):
     if not args or len(args) != 2:
         print("jump row - column")
         return
     cage = Cage(row=args[0], column=args[1])
     cage.jump()
+
+
+# while true go to star steppe, get field items, if stardust found, jump to stardust cage
 
 
 def stardust_farm():

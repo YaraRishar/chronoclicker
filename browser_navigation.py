@@ -1,3 +1,4 @@
+from selenium.webdriver import Keys
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.support.select import Select
 
@@ -443,3 +444,23 @@ class DriverWrapper(WebDriver):
             time.sleep(random.uniform(1, 2))
             result = self.click(xpath="//a[@id='cancel']")
             return result
+
+    def bury_item(self, item_img_id: str, level: int):
+        self.click(xpath=f"//div[@class='itemInMouth']/img[@src='things/{item_img_id}.png']", offset_range=(10, 10))
+        time.sleep(random.uniform(0.3, 0.6))
+        if level != 1:
+            slider = self.locate_element(xpath="//div[@id='layer']/"
+                                               "span[@class='ui-slider-handle ui-state-default ui-corner-all']")
+            self.click(given_element=slider)
+            while level != 1:
+                time.sleep(random.uniform(0.1, 0.5))
+                slider.send_keys(Keys.ARROW_RIGHT)
+                level -= 1
+        self.click(xpath="//a[text()='Закопать']")
+        seconds = self.check_time() + random.uniform(self.short_break_duration[0], self.short_break_duration[1])
+        hist_list = self.get_hist_list()
+        clicker_utils.print_timer(console_string=f"{hist_list[-1].lstrip()}", seconds=seconds)
+
+    def get_hist_list(self) -> list:
+        hist_list = self.locate_element("//span[@id='ist']").text.split(".")[:-1]
+        return hist_list

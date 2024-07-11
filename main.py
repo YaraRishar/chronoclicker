@@ -2,7 +2,6 @@ import time
 import random
 import re
 import os.path
-from selenium.webdriver import Keys
 from urllib3.exceptions import ProtocolError
 import browser_navigation
 import clicker_utils
@@ -132,8 +131,7 @@ def info():
           f"\t Здоровье:\t{driver.check_parameter('health')}%\n"
           f"\t Чистота: \t{driver.check_parameter('clean')}%")
     print("Последние 5 записей в истории (введите hist, чтобы посмотреть полную историю):")
-    # hist_list = driver.locate_element("//span[@id='ist']").text.split('.')[-6:-1]
-    hist_list = get_hist_list()
+    hist_list = driver.get_hist_list()
     print(f"\t{'.\n\t'.join(hist_list[-6:])}.")
 
 
@@ -164,14 +162,9 @@ def hist():
     hist"""
 
     print("История:")
-    hist_list = get_hist_list()
+    hist_list = driver.get_hist_list()
     for item in hist_list:
         print(item)
-
-
-def get_hist_list() -> list:
-    hist_list = driver.locate_element("//span[@id='ist']").text.split(".")[:-1]
-    return hist_list
 
 
 def clear_hist():
@@ -418,30 +411,13 @@ def bury_handler(args=None):
     inv_items = get_inv_items()
     if item_img_id == "inv":
         for item in inv_items:
-            bury_item(item, level)
+            driver.bury_item(item, level)
             return
     if item_img_id not in inv_items:
         print(f"Предмета с айди {item_img_id} нет в инвентаре! Ссылка на изображение: "
               f"https://catwar.su/cw3/things/{item_img_id}.png")
         return
-    bury_item(item_img_id, level)
-
-
-def bury_item(item_img_id: str, level: int):
-    driver.click(xpath=f"//div[@class='itemInMouth']/img[@src='things/{item_img_id}.png']", offset_range=(10, 10))
-    time.sleep(random.uniform(0.3, 0.6))
-    if level != 1:
-        slider = driver.locate_element(xpath="//div[@id='layer']/"
-                                             "span[@class='ui-slider-handle ui-state-default ui-corner-all']")
-        driver.click(given_element=slider)
-        while level != 1:
-            time.sleep(random.uniform(0.1, 0.5))
-            slider.send_keys(Keys.ARROW_RIGHT)
-            level -= 1
-    driver.click(xpath="//a[text()='Закопать']")
-    seconds = driver.check_time() + random.uniform(driver.short_break_duration[0], driver.short_break_duration[1])
-    hist_list = get_hist_list()
-    clicker_utils.print_timer(console_string=f"{hist_list[-1].lstrip()}", seconds=seconds)
+    driver.bury_item(item_img_id, level)
 
 
 class Cage:

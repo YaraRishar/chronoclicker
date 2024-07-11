@@ -412,6 +412,7 @@ def bury_handler(args=None):
     if item_img_id == "inv":
         for item in inv_items:
             driver.bury_item(item, level)
+            level = 0
         return
     if item_img_id not in inv_items:
         print(f"Предмета с айди {item_img_id} нет в инвентаре! Ссылка на изображение: "

@@ -16,8 +16,8 @@ def repeat(args=None):
         return
     while True:
         do(args, show_avaliables=False)
-        clicker_utils.trigger_long_break(long_break_chance=settings["long_break_chance"],
-                                         long_break_duration=settings["long_break_duration"])
+        driver.trigger_long_break(long_break_chance=settings["long_break_chance"],
+                                  long_break_duration=settings["long_break_duration"])
 
 
 def do(args=None, show_avaliables=True):
@@ -47,7 +47,8 @@ def do(args=None, show_avaliables=True):
                                                            settings["short_break_duration"][1])
             last_hist_entry = driver.locate_element("//span[@id='ist']").text.split(".")[-2]
 
-            clicker_utils.print_timer(console_string=last_hist_entry, seconds=seconds)
+            clicker_utils.print_timer(console_string=last_hist_entry,
+                                      seconds=seconds, turn_off_timer=driver.turn_off_timer)
 
             if action == "Принюхаться":
                 print(driver.check_skill("smell"))
@@ -279,7 +280,7 @@ def wait_for(seconds=None):
         print("wait seconds_from - seconds_to")
         return
     seconds: float = random.uniform(int(seconds[0]), int(seconds[1]))
-    clicker_utils.print_timer(console_string="Начато ожидание", seconds=seconds)
+    clicker_utils.print_timer(console_string="Начато ожидание", seconds=seconds, turn_off_timer=driver.turn_off_timer)
 
 
 def text_to_chat(message=None):
@@ -577,6 +578,22 @@ def stardust_farm():
                 items = cage.get_items()
 
 
+def loop_alias(args=None):
+    """ Повторять сокращение бесконечно (как команда patrol и repeat)
+     loop alias_name """
+    if not args or args == [""] or len(args) != 1:
+        print("Введите название сокращения. Пример: loop название_сокращения")
+        return
+    alias_name = args[0]
+    if alias_name not in alias_dict.keys():
+        print(f"Сокращение под названием {alias_name} не найдено.")
+        return
+    while True:
+        multi_comm_handler(alias_dict[alias_name])
+        driver.trigger_long_break(long_break_chance=settings["long_break_chance"],
+                                  long_break_duration=settings["long_break_duration"])
+
+
 comm_dict = {"patrol": patrol,
              # patrol  location1 - locationN
              "go": go,
@@ -623,6 +640,7 @@ comm_dict = {"patrol": patrol,
              # q
              "bury": bury_handler,
              # bury item_img_id - level
+             "loop": loop_alias,
              }
 
 if __name__ == "__main__":
@@ -636,7 +654,8 @@ if __name__ == "__main__":
                                               critical_sleep_pixels=settings["critical_sleep_pixels"],
                                               is_headless=settings["is_headless"],
                                               driver_path=settings["driver_path"],
-                                              max_waiting_time=settings["max_waiting_time"])
+                                              max_waiting_time=settings["max_waiting_time"],
+                                              turn_off_timer=settings["turn_off_dynamic_timer"])
 
     print(f"Игровая загружается, если прошло более {settings['max_waiting_time'] * 10} секунд - перезапустите кликер.")
     driver.get("https://catwar.su/cw3/")  # vibecheck https://bot.sannysoft.com/

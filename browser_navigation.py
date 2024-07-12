@@ -31,6 +31,7 @@ class DriverWrapper(WebDriver):
                  driver_path: str = "",
                  max_waiting_time: int = 3,
                  monitor_chat_while_waiting: bool = False,
+                 turn_off_timer: bool = False,
                  notify_about: [str] = "",
                  notification_url: str = ""):
 
@@ -42,6 +43,7 @@ class DriverWrapper(WebDriver):
         self.driver_path = driver_path
         self.max_waiting_time = max_waiting_time
         self.monitor_chat_while_waiting = monitor_chat_while_waiting
+        self.turn_off_timer = turn_off_timer
         self.notify_about = notify_about
         self.notification_url = notification_url
 
@@ -263,7 +265,8 @@ class DriverWrapper(WebDriver):
 
         if self.is_action_active():
             seconds = self.check_time()
-            clicker_utils.print_timer(console_string="Действие уже совершается!", seconds=seconds)
+            clicker_utils.print_timer(console_string="Действие уже совершается!", seconds=seconds,
+                                      turn_off_timer=self.turn_off_timer)
             return False
         elements = self.locate_elements(f"//span[text()='{location_name.replace(" (о)", "")}' "
                                         f"and @class='move_name']/preceding-sibling::*")
@@ -275,17 +278,18 @@ class DriverWrapper(WebDriver):
         if " (о)" in location_name:
             seconds = random.uniform(0.5, 3)
             clicker_utils.print_timer(console_string=f"Совершён переход с отменой в локацию {location_name}",
-                                      seconds=seconds)
+                                      seconds=seconds, turn_off_timer=self.turn_off_timer)
             self.click(xpath="//a[@id='cancel']")
             time.sleep(random.uniform(1, 3))
             return has_moved
         seconds = self.check_time() + random.uniform(self.short_break_duration[0],
                                                      self.short_break_duration[1])
-        clicker_utils.print_timer(console_string=f"Совершён переход в локацию {location_name}", seconds=seconds)
+        clicker_utils.print_timer(console_string=f"Совершён переход в локацию {location_name}", seconds=seconds,
+                                  turn_off_timer=self.turn_off_timer)
         if show_availibles:
             print(f"Доступные локации: {', '.join(self.get_availible_locations())}")
         else:
-            clicker_utils.trigger_long_break(self.long_break_chance, self.long_break_duration)
+            self.trigger_long_break(self.long_break_chance, self.long_break_duration)
 
         return has_moved
 
@@ -459,8 +463,17 @@ class DriverWrapper(WebDriver):
         self.click(xpath="//a[text()='Закопать']")
         seconds = self.check_time() + random.uniform(self.short_break_duration[0], self.short_break_duration[1])
         hist_list = self.get_hist_list()
-        clicker_utils.print_timer(console_string=f"{hist_list[-1].lstrip()}", seconds=seconds)
+        clicker_utils.print_timer(console_string=f"{hist_list[-1].lstrip()}",
+                                  seconds=seconds, turn_off_timer=self.turn_off_timer)
 
     def get_hist_list(self) -> list:
         hist_list = self.locate_element("//span[@id='ist']").text.split(".")[:-1]
         return hist_list
+
+    def trigger_long_break(self, long_break_chance: float, long_break_duration: list):
+        """ Включение долгого перерыва после действия/перехода """
+
+        if random.random() < long_break_chance:
+            seconds = random.uniform(long_break_duration[0], long_break_duration[1])
+            clicker_utils.print_timer(console_string="Начался долгий перерыв",
+                                      seconds=seconds, turn_off_timer=self.turn_off_timer)

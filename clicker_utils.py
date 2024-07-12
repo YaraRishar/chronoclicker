@@ -1,26 +1,22 @@
 import datetime
 import json
 import os
-import random
 import sys
 import time
 import traceback
 
 
-def print_timer(console_string: str, seconds: float):
+def print_timer(console_string: str, seconds: float, turn_off_timer=False):
+    if turn_off_timer:
+        seconds = round(seconds)
+        print(f"{console_string}. Осталось {seconds // 60} мин {seconds % 60} с.")
+        time.sleep(seconds)
+        return
     for i in range(round(seconds), -1, -1):
         sys.stdout.write(f"\r{console_string}. Осталось {i // 60} мин {i % 60} с.")
         sys.stdout.flush()
         time.sleep(1)
     sys.stdout.write("\n")
-
-
-def trigger_long_break(long_break_chance: float, long_break_duration: list):
-    """ Включение долгого перерыва после действия/перехода """
-
-    if random.random() < long_break_chance:
-        seconds = random.uniform(long_break_duration[0], long_break_duration[1])
-        print_timer(console_string="Начался долгий перерыв", seconds=seconds)
 
 
 def get_next_index(length, index=-1, direction=1):

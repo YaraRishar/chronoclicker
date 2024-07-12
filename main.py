@@ -566,9 +566,6 @@ def jump_to_cage(args=None):
     cage.jump()
 
 
-# while true go to star steppe, get field items, if stardust found, jump to stardust cage
-
-
 def stardust_farm():
     while True:
         go(["Звёздная степь"])

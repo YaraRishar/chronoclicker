@@ -384,7 +384,7 @@ def comm_handler(comm: str):
     if main_comm == "alias":
         return create_alias(comm)
     if main_comm not in comm_dict.keys():
-        return print("Команда не найдена. Наберите help для просмотра списка команд.")
+        return print(f"Команда {main_comm} не найдена. Наберите help для просмотра списка команд.")
 
     if comm == main_comm:
         return comm_dict[main_comm]()
@@ -410,10 +410,13 @@ def bury_handler(args=None):
         print("bury id_img - level или bury inv - level")
         return
     inv_items = get_inv_items()
+    if not inv_items:
+        print("Во рту нет предметов!")
+        return
     if item_img_id == "inv":
         for item in inv_items:
             driver.bury_item(item, level)
-            level = 0
+            level = 1
         return
     if item_img_id not in inv_items:
         print(f"Предмета с айди {item_img_id} нет в инвентаре! Ссылка на изображение: "

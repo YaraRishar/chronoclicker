@@ -1,7 +1,7 @@
 from cx_Freeze import setup, Executable
 import sys
 
-base = "console" if sys.platform == "win64" else None
+base = "console" if sys.platform == "linux" else None
 
 executables = [
     Executable("main.py", base=base, target_name="Chronoclicker")

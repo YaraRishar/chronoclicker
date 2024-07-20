@@ -6,17 +6,21 @@ import time
 import traceback
 
 
-def print_timer(console_string: str, seconds: float, turn_off_timer=False):
-    if turn_off_timer:
-        seconds = round(seconds)
-        print(f"{console_string}. Осталось {seconds // 60} мин {seconds % 60} с.")
-        time.sleep(seconds)
-        return
-    for i in range(round(seconds), -1, -1):
-        sys.stdout.write(f"\r{console_string}. Осталось {i // 60} мин {i % 60} с.")
-        sys.stdout.flush()
-        time.sleep(1)
-    sys.stdout.write("\n")
+def print_timer(console_string: str, seconds: float, turn_off_timer=False) -> bool:
+    try:
+        if turn_off_timer:
+            seconds = round(seconds)
+            print(f"{console_string}. Осталось {seconds // 60} мин {seconds % 60} с.")
+            time.sleep(seconds)
+            return False
+        for i in range(round(seconds), -1, -1):
+            sys.stdout.write(f"\r{console_string}. Осталось {i // 60} мин {i % 60} с.")
+            sys.stdout.flush()
+            time.sleep(1)
+        sys.stdout.write("\n")
+        return False
+    except KeyboardInterrupt:
+        return True
 
 
 def get_next_index(length, index=-1, direction=1):

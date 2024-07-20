@@ -47,9 +47,10 @@ def do(args=None, show_avaliables=True):
                                                            settings["short_break_duration"][1])
             last_hist_entry = driver.locate_element("//span[@id='ist']").text.split(".")[-2]
 
-            clicker_utils.print_timer(console_string=last_hist_entry,
-                                      seconds=seconds, turn_off_timer=driver.turn_off_timer)
-
+            do_cancel = clicker_utils.print_timer(console_string=last_hist_entry,
+                                                  seconds=seconds, turn_off_timer=driver.turn_off_timer)
+            if do_cancel:
+                cancel()
             if action == "Принюхаться":
                 print(driver.check_skill("smell"))
                 driver.click(xpath="//input[@value='Вернуть поле']")
@@ -662,8 +663,9 @@ if __name__ == "__main__":
 
     if driver.current_url != "https://catwar.su/cw3/":
         print("Для включения кликера вам необходимо залогиниться в варовский аккаунт.\n"
-              "ВНИМАНИЕ: все ваши данные (почта и пароль) сохраняются в папке selenium, она создаётся \n"
-              "в той же папке, куда вы поместили этот скрипт (main.py). НЕ ОТПРАВЛЯЙТЕ НИКОМУ папку selenium, \n"
+              "ВНИМАНИЕ: все ваши данные (почта и пароль) сохраняются в папке selenium (либо в профилях chrome),"
+              " она создаётся в той же папке, \n"
+              "куда вы поместили этот скрипт (main.py). НЕ ОТПРАВЛЯЙТЕ НИКОМУ папку selenium, \n"
               "для работы кликера нужен main.py, browser_navigation.py, clicker_utils.py и config.json.\n"
               "Все команды кликера работают ИЗ ИГРОВОЙ!")
     else:
@@ -675,8 +677,8 @@ while command != "q":
     try:
         multi_comm_handler(command)
     except (KeyboardInterrupt, ProtocolError):
-        end_session()
-        break
+        print("key interrupt, canceling...")
+        cancel()
     except Exception as exception:
         print(type(exception).__name__)
         clicker_utils.crash_handler(exception)

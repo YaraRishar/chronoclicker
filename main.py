@@ -458,7 +458,7 @@ class Cage:
             self.cat_color_url: str = self.get_cat_color_url()
             self.cat_size: int = self.get_cat_size()
 
-    def get_items(self) -> [str]:
+    def get_items(self) -> list:
         item_ids = []
         cage_element = driver.locate_element(xpath=f"//*[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/div",
                                              do_wait=False)
@@ -466,7 +466,7 @@ class Cage:
         try:
             item_ids.append(re.findall(pattern=r"things\/(\d*)", string=style_str))
         except IndexError:
-            return ()
+            return []
         item_ids = [int(i) for i in item_ids[0]]
         return item_ids
 
@@ -501,7 +501,7 @@ class Cage:
         cat_smell = int(cat_smell)
         return cat_smell
 
-    def get_cat_items(self) -> [str]:
+    def get_cat_items(self) -> list:
         items = driver.locate_elements(xpath=f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/div"
                                              f"/span/span/span[@class='cat_tooltip']/ol/li/img", do_wait=False)
         item_ids = []
@@ -559,15 +559,40 @@ class Cage:
             go([location_name])
             return
         driver.click(xpath=f"//*[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]", offset_range=(40, 70))
-        print(f"Прыжок на {self.row} ряд, {self.column} клетку.")
+
+    def pick_up_item(self) -> bool:
+        old_inv = get_inv_items()
+        cage_items = self.items
+        if not cage_items:
+            print(f"На клетке {self.row}x{self.column} нет предметов!")
+            return False
+        if self.has_cat():
+            print(f"Клетка {self.row}x{self.column} занята котом по имени {self.cat_name}!")
+            return False
+        if self.has_move:
+            print(f"Клетка {self.row}x{self.column} занята переходом на локацию {self.move_name}!")
+            return False
+        driver.click(xpath="//td[@class='cage']/div[@class='cage_items' and not(*) and not(@style)]/..",
+                     offset_range=(40, 70))
+        time.sleep(random.uniform(0.3, 1))
+        self.jump()
+        new_inv = get_inv_items()
+        if new_inv == old_inv:
+            print(f"Не удалось подобрать предмет с клетки {self.row}x{self.column}!")
+            return False
+        print("Предмет подобран!")
+        print_inv()
+        return True
 
 
 def jump_to_cage(args=None):
     if not args or len(args) != 2:
         print("jump row - column")
         return
-    cage = Cage(row=args[0], column=args[1])
+    row, column = args
+    cage = Cage(row, column)
     cage.jump()
+    print(f"Прыжок на {row} ряд, {column} клетку.")
 
 
 def stardust_farm():
@@ -593,6 +618,32 @@ def loop_alias(args=None):
         multi_comm_handler(alias_dict[alias_name])
         driver.trigger_long_break(long_break_chance=settings["long_break_chance"],
                                   long_break_duration=settings["long_break_duration"])
+
+
+def dig_everything(locations_checked=None):
+    if locations_checked is None:
+        locations_checked = []
+    current_location = driver.locate_element("//span[@id='location']").text
+    if current_location in locations_checked:
+        locations = driver.get_availible_locations()
+        go(random.sample(locations, 1))
+        dig_everything(locations_checked)
+
+    for row in range(1, 11):
+        for column in range(1, 7):
+            print(f"cage {row}x{column}, location {current_location}")
+            cage = Cage(column, row)
+            if not cage.get_items() and not cage.has_cat():
+                cage.jump()
+                do(["Копать землю"])
+                items_dug = cage.get_items()
+                if items_dug:
+                    print("Найдены предметы!")
+                    print("items_dug", items_dug)
+                    cage.pretty_print()
+                cage.pick_up_item()
+    time.sleep(random.uniform(1, 5))
+    locations_checked.append(current_location)
 
 
 comm_dict = {"patrol": patrol,
@@ -677,8 +728,8 @@ while command != "q":
     try:
         multi_comm_handler(command)
     except (KeyboardInterrupt, ProtocolError):
-        print("key interrupt, canceling...")
-        cancel()
+        end_session()
+        break
     except Exception as exception:
         print(type(exception).__name__)
         clicker_utils.crash_handler(exception)

@@ -27,7 +27,7 @@ class DriverWrapper(WebDriver):
                  long_break_duration=(10, 200),
                  short_break_duration=(1, 5),
                  critical_sleep_pixels=20,
-                 is_headless: str = "False",
+                 is_headless: bool = False,
                  driver_path: str = "",
                  max_waiting_time: int = 3,
                  monitor_chat_while_waiting: bool = False,
@@ -57,7 +57,7 @@ class DriverWrapper(WebDriver):
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
 
-        if is_headless == "True":
+        if is_headless:
             options.add_argument("--headless")
             print("Запуск в фоновом режиме... Может занять некоторое время.")
         else:

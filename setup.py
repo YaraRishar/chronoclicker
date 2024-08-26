@@ -1,11 +1,6 @@
 from cx_Freeze import setup, Executable
-import sys
 
-base = "console" if sys.platform == "linux" else None
-
-executables = [
-    Executable("main.py", base=base, target_name="Chronoclicker")
-]
+executables = [Executable("main.py")]
 
 setup(name="Chronoclicker",
       version="1.3.3",

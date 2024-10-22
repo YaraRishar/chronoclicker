@@ -1,10 +1,11 @@
+import re
 import time
 import random
-import re
 import os.path
 from urllib3.exceptions import ProtocolError
 import browser_navigation
 import clicker_utils
+import cage_utils
 
 
 def repeat(args=None):
@@ -24,6 +25,9 @@ def do(args=None, show_avaliables=True):
     """Команда для исполнения последовательности действий 1 раз. Использование:
     do действие1 - действие2 - действие3"""
 
+    if driver.is_held():
+        driver.quit()
+        return
     if not args or args == [""]:
         print("Для действия нужны аргументы. Наберите help для вывода дополнительной информации.")
         return
@@ -118,20 +122,17 @@ def info():
     """Команда для вывода информации о состоянии игрока из Игровой. Использование:
     info"""
 
-    current_location = driver.locate_element("//span[@id='location']").text
-    while current_location == "[ Загружается… ]":
-        current_location = driver.locate_element("//span[@id='location']").text
-
+    current_location = driver.get_current_location()
     print(f"Текущая локация: {current_location}\n"
           f"Доступные локации: {', '.join(driver.get_availible_locations())}\n"
           f"Доступные действия: {', '.join(driver.get_availible_actions(action_dict))}")
     driver.print_cats()
-    print(f"\t Сонливость:\t{driver.check_parameter('dream')}%\n"
-          f"\t Голод:\t\t{driver.check_parameter('hunger')}%\n"
-          f"\t Жажда:\t\t{driver.check_parameter('thirst')}%\n"
-          f"\t Нужда:\t\t{driver.check_parameter('need')}%\n"
-          f"\t Здоровье:\t{driver.check_parameter('health')}%\n"
-          f"\t Чистота: \t{driver.check_parameter('clean')}%")
+    print(f"\t Сонливость:\t{driver.get_parameter('dream')}%\n"
+          f"\t Голод:\t\t{driver.get_parameter('hunger')}%\n"
+          f"\t Жажда:\t\t{driver.get_parameter('thirst')}%\n"
+          f"\t Нужда:\t\t{driver.get_parameter('need')}%\n"
+          f"\t Здоровье:\t{driver.get_parameter('health')}%\n"
+          f"\t Чистота: \t{driver.get_parameter('clean')}%")
     print("Последние 5 записей в истории (введите hist, чтобы посмотреть полную историю):")
     hist_list = driver.get_hist_list()
     print(f"\t{'.\n\t'.join(hist_list[-6:])}.")
@@ -189,32 +190,6 @@ def cancel() -> bool:
     return False
 
 
-def swim(escape_to_location=None):
-    """ Команда для плавания с отсыпом на соседней локации. Критическое количество пикселей сна (при
-    котором начнётся отсып) указывается в настройках. Для справки:
-    20 пикс. = ~43 минуты сна, 30 пикс. = ~40 минут сна. Считаются 'оставшиеся' зелёные пиксели.
-    ВНИМАНИЕ: перед использованием этой команды проверьте на безопасной ПУ локации,
-    работает ли она на вашем устройстве.
-    Использование (находясь на локации с ПУ):
-    swim локация_для_отсыпа """
-
-    if not escape_to_location:
-        repeat(["Поплавать"])
-    availible_locations = driver.get_availible_locations()
-    if escape_to_location[0] and escape_to_location[0] not in availible_locations:
-        print("Для отсыпа введите название локации, соседней с плавательной!")
-        return
-    while True:
-        sleep_pixels = driver.check_parameter("dream")
-        print(f"Сон: {sleep_pixels} зелёных пикселей.")
-        if sleep_pixels < settings["critical_sleep_pixels"]:
-            current_location = driver.locate_element("//span[@id='location']").text
-            go(escape_to_location)
-            do(["Поспать"])
-            go([current_location])
-        do(["Поплавать"])
-
-
 def create_alias(comm):
     """Команда для создания сокращений для часто используемых команд.
     Использование:
@@ -259,7 +234,7 @@ def change_settings(args=None):
         return
     key, value = args
     try:
-        if key == "is_headless" or key == "driver_path":
+        if key == "is_headless" or key == "driver_path" or key == "my_id":
             config["settings"][key] = value
         else:
             config["settings"][key] = eval(value)
@@ -270,7 +245,7 @@ def change_settings(args=None):
 
 
 def wait_for(seconds=None):
-    """ Ничего не делать рандомное количество времени от seconds_start до seconds_end секунд
+    """ Ничего не делать рандомное количество времени от seconds_start до seconds_end секунд либо ровно seconds секунд
      seconds: list = [seconds_start, seconds_end]"""
 
     if not seconds or seconds == [""] or len(seconds) > 2:
@@ -278,7 +253,10 @@ def wait_for(seconds=None):
     try:
         seconds[0], seconds[1] = int(seconds[0]), int(seconds[1])
     except (IndexError, ValueError):
-        print("wait seconds_from - seconds_to")
+        print("wait seconds_from - seconds_to ИЛИ wait seconds")
+        return
+    if len(seconds) == 1:
+        clicker_utils.print_timer(console_string="Начато ожидание", seconds=seconds[0], turn_off_timer=driver.turn_off_timer)
         return
     seconds: float = random.uniform(int(seconds[0]), int(seconds[1]))
     clicker_utils.print_timer(console_string="Начато ожидание", seconds=seconds, turn_off_timer=driver.turn_off_timer)
@@ -306,19 +284,8 @@ def print_rabbits_balance():
     print("Кролей на счету:", rabbit_balance)
 
 
-def get_inv_items() -> list:
-    """ Получить список id изображений всех предметов в инвентаре """
-
-    inv_elements = driver.locate_elements(xpath="//div[@class='itemInMouth']/img")
-    inv_ids = []
-    for element in inv_elements:
-        style_str = element.get_attribute("src")
-        inv_ids.append(int(re.findall(pattern=r"things\/(\d*)", string=style_str)[0]))
-    return inv_ids
-
-
 def print_inv():
-    inv_ids = get_inv_items()
+    inv_ids = driver.get_inv_items()
     print("Предметы во рту:")
     for i in inv_ids:
         print(f"https://catwar.su/cw3/things/{i}.png")
@@ -351,8 +318,25 @@ def print_cage_info(args=()):
     if not args or len(args) != 2:
         print("c row - column")
         return
-    cage = Cage(row=args[0], column=args[1])
+    cage = cage_utils.Cage(driver, row=args[0], column=args[1])
     cage.pretty_print()
+
+
+def command_parser(comm):
+    # param - сон > 30 ? go Поляна для отдыха; do Поспать : wait 1
+    # loop param - сон > 30 ? go Поляна для отдыха; do Поспать : wait 1
+    has_condition: bool
+    condition = comm.split(" ? ")[0]
+    # parse condition
+    for item in condition_list:
+        if item in condition:
+            condition_comm, condition_value = condition.split(f" {item} ")
+            has_condition = True
+            break
+    # real_condition_value = condition_comm
+    level_2 = comm.split(" ? ")[1].split(" : ")
+    print("condition", condition)
+    print("level_2", level_2)
 
 
 def multi_comm_handler(multi_comm: str):
@@ -410,7 +394,7 @@ def bury_handler(args=None):
     except ValueError:
         print("bury id_img - level или bury inv - level")
         return
-    inv_items = get_inv_items()
+    inv_items = driver.get_inv_items()
     if not inv_items:
         print("Во рту нет предметов!")
         return
@@ -426,187 +410,21 @@ def bury_handler(args=None):
     driver.bury_item(item_img_id, level)
 
 
-class Cage:
-    def __init__(self, row: int, column: int):
-        row, column = int(row), int(column)
-        if row not in range(1, 7) or column not in range(1, 11):
-            print("Неверные координаты клетки!")
-            return
-
-        self.row = row
-        self.column = column
-        self.items: [str] = self.get_items()
-        self.has_move: bool = self.is_move()
-        self.move_name: str = ""
-        if self.has_move:
-            self.move_name: str = self.get_move_name()
-
-        self.cat_name: str = ""
-        self.cat_rank: str = ""
-        self.cat_smell: int = -1
-        self.cat_items: [str] = ()
-        self.cat_status: str = ""
-        self.cat_color_url: str = ""
-        self.cat_size: int = -1
-
-        if not self.is_move() and self.has_cat():
-            self.cat_name: str = self.get_cat_name()
-            self.cat_rank: str = self.get_cat_rank()
-            self.cat_smell: int = self.get_cat_smell()
-            self.cat_items: [str] = self.get_cat_items()
-            self.cat_status: str = self.get_cat_status()
-            self.cat_color_url: str = self.get_cat_color_url()
-            self.cat_size: int = self.get_cat_size()
-
-    def get_items(self) -> list:
-        item_ids = []
-        cage_element = driver.locate_element(xpath=f"//*[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/div",
-                                             do_wait=False)
-        style_str = cage_element.get_attribute("style")
-        try:
-            item_ids.append(re.findall(pattern=r"things\/(\d*)", string=style_str))
-        except IndexError:
-            return []
-        item_ids = [int(i) for i in item_ids[0]]
-        return item_ids
-
-    def is_move(self) -> bool:
-        xpath = (f"//*[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/"
-                 f"div/span[@class='move_parent']/span[@class='move_name']")
-        cage_element = driver.locate_element(xpath=xpath, do_wait=False)
-        return bool(cage_element)
-
-    def has_cat(self) -> bool:
-        cat = driver.locate_element(xpath=f"//*[@id='cages']/tbody/tr[{self.row}]/"
-                                          f"td[{self.column}]/div/span[@class='catWithArrow']", do_wait=False)
-        return bool(cat)
-
-    def get_cat_name(self) -> str:
-        element = driver.locate_element(xpath=f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]"
-                                              f"/div/span/span/span[@class='cat_tooltip']/u/a")
-        cat_name = element.get_attribute(name="innerText")
-        return cat_name
-
-    def get_cat_rank(self) -> str:
-        xpath = (f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/"
-                 f"div/span/span/span[@class='cat_tooltip']/div/small/i")
-        rank = driver.locate_element(xpath=xpath)
-        rank = rank.get_attribute("innerText")
-        return rank
-
-    def get_cat_smell(self) -> int:
-        smell = driver.locate_element(xpath=f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/div"
-                                            f"/span/span/span[@class='cat_tooltip']/img")
-        cat_smell = re.findall(pattern=r"odoroj\/(\d+).png", string=smell.get_attribute("src"))[0]
-        cat_smell = int(cat_smell)
-        return cat_smell
-
-    def get_cat_items(self) -> list:
-        items = driver.locate_elements(xpath=f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/div"
-                                             f"/span/span/span[@class='cat_tooltip']/ol/li/img", do_wait=False)
-        item_ids = []
-        for element in items:
-            item_ids.append(int(re.findall(pattern=r"things\/(\d*)", string=element.get_attribute("src"))[0]))
-        return item_ids
-
-    def get_cat_status(self) -> str:
-        status_element = driver.locate_element(xpath=f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]"
-                                                     f"/div/span/span/span/span/font")
-        status = status_element.get_attribute("innerText")
-        return status
-
-    def get_cat_color_url(self) -> str:
-        xpath = f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/div/span/span/div/div"
-        element = driver.locate_element(xpath=xpath)
-        style_str = element.get_attribute("style")
-        url = re.findall(pattern=r'url\(\"(.*?)\.png', string=style_str)[0]
-        url = "https://catwar.su/" + url + ".png"
-        return url
-
-    def get_cat_size(self) -> int:
-        xpath = f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/div/span/span/div/div"
-        element = driver.locate_element(xpath=xpath)
-        style_str = element.get_attribute("style")
-        size = re.findall(pattern=r'background-size: (\d+)%;', string=style_str)[0]
-        return size
-
-    def get_move_name(self) -> str:
-        xpath = f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/div/span/span[@class='move_name']"
-        move_name = driver.locate_element(xpath=xpath).text
-        return move_name
-
-    def pretty_print(self):
-        print(f"{self.row} ряд, {self.column} клетка")
-        if self.is_move():
-            print(f"Переход на локацию {self.move_name}")
-            return
-        if self.items:
-            items_string = [f"https://catwar.su/cw3/things/{i}.png" for i in self.items]
-            print(f"Предметы на клетке: {", ".join(items_string)}")
-        if self.cat_name:
-            print(f"{self.cat_name}: {self.cat_rank} | {self.cat_status}\n"
-                  f"Рост: {self.cat_size}%, ссылка на окрас: {self.cat_color_url}")
-            if self.cat_items:
-                items_string = [f"https://catwar.su/cw3/things/{i}.png" for i in self.cat_items]
-                print(f"Предметы во рту: {", ".join(items_string)}")
-
-    def jump(self):
-        if self.has_cat():
-            print(f"Клетка {self.row}x{self.column} занята котом по имени {self.cat_name}!")
-            return
-        elif self.has_move:
-            location_name = self.move_name
-            go([location_name])
-            return
-        driver.click(xpath=f"//*[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]", offset_range=(40, 70))
-
-    def pick_up_item(self) -> bool:
-        old_inv = get_inv_items()
-        cage_items = self.items
-        if not cage_items:
-            print(f"На клетке {self.row}x{self.column} нет предметов!")
-            return False
-        if self.has_cat():
-            print(f"Клетка {self.row}x{self.column} занята котом по имени {self.cat_name}!")
-            return False
-        if self.has_move:
-            print(f"Клетка {self.row}x{self.column} занята переходом на локацию {self.move_name}!")
-            return False
-        driver.click(xpath="//td[@class='cage']/div[@class='cage_items' and not(*) and not(@style)]/..",
-                     offset_range=(40, 70))
-        time.sleep(random.uniform(0.3, 1))
-        self.jump()
-        new_inv = get_inv_items()
-        if new_inv == old_inv:
-            print(f"Не удалось подобрать предмет с клетки {self.row}x{self.column}!")
-            return False
-        print("Предмет подобран!")
-        print_inv()
-        return True
-
-
-def jump_to_cage(args=None):
+def jump_to_cage(args=None, verbose=True):
     if not args or len(args) != 2:
         print("jump row - column")
         return
     row, column = args
-    cage = Cage(row, column)
+    cage = cage_utils.Cage(driver, row, column)
     cage.jump()
-    print(f"Прыжок на {row} ряд, {column} клетку.")
-
-
-def stardust_farm():
-    while True:
-        go(["Звёздная степь"])
-        for row in range(1, 7):
-            for column in range(1, 11):
-                cage = Cage(row=row, column=column)
-                items = cage.get_items()
+    if verbose:
+        print(f"Прыжок на {row} ряд, {column} клетку.")
 
 
 def loop_alias(args=None):
     """ Повторять сокращение бесконечно (как команда patrol и repeat)
-     loop alias_name """
+     loop alias_name
+     """
     if not args or args == [""] or len(args) != 1:
         print("Введите название сокращения. Пример: loop название_сокращения")
         return
@@ -623,27 +441,182 @@ def loop_alias(args=None):
 def dig_everything(locations_checked=None):
     if locations_checked is None:
         locations_checked = []
-    current_location = driver.locate_element("//span[@id='location']").text
+    current_location = driver.get_current_location()
     if current_location in locations_checked:
         locations = driver.get_availible_locations()
         go(random.sample(locations, 1))
         dig_everything(locations_checked)
 
-    for row in range(1, 11):
-        for column in range(1, 7):
+    for row in range(1, 7):
+        for column in range(1, 11):
+            time.sleep(random.uniform(1, 2))
+            cage = cage_utils.Cage(driver, row, column)
             print(f"cage {row}x{column}, location {current_location}")
-            cage = Cage(column, row)
+            do(["Копать землю"], show_avaliables=False)
+            items_dug = cage.get_items()
+            if items_dug:
+                print("Найдены предметы!")
+                cage.pretty_print()
+                cage.pick_up_item()
             if not cage.get_items() and not cage.has_cat():
                 cage.jump()
-                do(["Копать землю"])
-                items_dug = cage.get_items()
-                if items_dug:
-                    print("Найдены предметы!")
-                    print("items_dug", items_dug)
-                    cage.pretty_print()
-                cage.pick_up_item()
     time.sleep(random.uniform(1, 5))
     locations_checked.append(current_location)
+
+
+def find_items(items_to_seek=None):
+    """ Искать перечисленные предметы по разным локациям, поднимать их, если найдены """
+
+    if not items_to_seek:
+        print("find_items item_id - item_id")
+        return
+    items_to_seek = [int(item) for item in items_to_seek]
+    cages_list = driver.get_cages_list()
+    for cage in cages_list:
+        items_on_cage = cage.get_items()
+        if not items_on_cage:
+            continue
+        for item in items_on_cage:
+            if item in items_to_seek:
+                print(f"found item with id {item}")
+                cage.pick_up_item()
+    availible_locations = driver.get_availible_locations()
+    random_location = random.sample(availible_locations, 1)
+    go(random_location)
+    find_items(items_to_seek)
+
+
+def find_cat_on_loc(names_to_find) -> tuple:
+    """ Найти кота на текущей локации по имени или ID """
+
+    cages_list = driver.get_cages_list()
+    for cage in cages_list:
+        if not cage.has_cat():
+            continue
+        cat_name = cage.get_cat_name()
+        cat_id = cage.get_cat_id()
+        location = driver.get_current_location()
+        if cat_name in names_to_find:
+            return cat_name, location, cage.row, cage.column
+        elif cat_id in names_to_find:
+            return cat_id, location, cage.row, cage.column
+    return False, False, False, False
+
+
+def find_cats(args=None):
+    """ Найти кота по его имени или ID на локациях, рандомно переходя по ним """
+
+    if args is None:
+        print("find_cat имя_кота")
+
+    names_to_find: list = args
+    while names_to_find:
+        cat_name, location, row, column = find_cat_on_loc(names_to_find)
+        if cat_name:
+            print(f"Кот {cat_name} найден в локации {location} на клетке {row}x{column}!")
+            names_to_find.remove(cat_name)
+            continue
+        availible_locations = driver.get_availible_locations()
+        random_location = random.sample(availible_locations, 1)
+        go(random_location)
+
+
+def parse_swim_location(sleep_loc, swim_loc) -> dict:
+    loc_dict = {sleep_loc: driver.get_move_coords(sleep_loc), swim_loc: driver.get_move_coords(swim_loc)}
+
+    jump_to_cage(loc_dict[swim_loc])
+    driver.has_moves()
+
+    return loc_dict
+
+
+def swim_with_sleep(args=None):
+    if args is None or len(args) != 2:
+        print("Команда вызывается на локации для отсыпа location_to_sleep, "
+              "где есть переход на плавательную локацию location_to_swim"
+              "\nswim location_to_sleep location_to_swim")
+        return
+    sleep_loc, swim_loc = args[0], args[1]
+    loc_dict = parse_swim_location(sleep_loc, swim_loc)
+
+    sleep_param = driver.get_parameter("sleep")
+    if sleep_param > settings["critical_sleep_pixels"]:
+        do(["Поспать"])
+
+    jump_to_cage(loc_dict[sleep_loc])
+    while sleep_param < settings["critical_sleep_pixels"]:
+        do(["Поплавать"])
+        sleep_param = driver.get_parameter("sleep")
+
+
+def pathfind_handler(end):
+    """ Найти путь по клеткам от вашего местоположения до end. Использование:
+     pathfind row - column"""
+
+    end = int(end[0]), int(end[1])
+    end_cage = cage_utils.Cage(driver, end[0], end[1])
+    if end_cage.is_move() or end_cage.has_cat():
+        print(f"Клетка {end} занята котом или переходом!")
+        return
+    my_info = find_cat_on_loc(settings["my_id"])
+    my_coords = my_info[2:]
+    cages = driver.get_cages_list()
+    forbidden_cages = []
+
+    for cage in cages:
+        if cage.is_move() or cage.has_cat():
+            forbidden_cages.append((cage.row, cage.column))
+
+    path = clicker_utils.pathfind(start=my_coords, end=end, forbidden_cages=forbidden_cages)
+    for cage in path:
+        jump_to_cage(cage, verbose=False)
+    driver.print_cats()
+
+
+def rotate_arrow(args=None):
+    if args is None:
+        return
+    seconds = float(args[0])
+    driver.execute_script("window.socketClient.emit('fight rotate', true)")
+    rng_time = random.uniform(-0.1, 0.1)
+    time.sleep(seconds + rng_time)
+    print(seconds + rng_time)
+    driver.execute_script("window.socketClient.emit('fight stopRotate')")
+
+
+def hit():
+    driver.execute_script("window.socketClient.emit('fight attack', false)")
+    time.sleep(0.5)
+    get_energy()
+
+
+def get_energy():
+    red_element = driver.locate_element(xpath=f"//div[@id='arrow{settings['my_id']}']/table/tbody/tr/td[1]")
+    green_element = driver.locate_element(xpath=f"//div[@id='arrow{settings['my_id']}']/table/tbody/tr/td[2]")
+    red_style = red_element.get_attribute("style")
+    red_pixels = float(re.findall(pattern=r"width: (\d*)", string=red_style)[0])
+
+    green_style = green_element.get_attribute("style")
+    green_pixels = float(re.findall(pattern=r"width: (\d*)", string=green_style)[0])
+
+    if red_pixels:
+        print("green_pixels, red_pixels", green_pixels, red_pixels)
+        print(green_pixels / red_pixels)
+        return
+    print(1)
+
+
+def check_parameter(args=None):
+    if args is None or len(args) != 1:
+        print("ОШЫБКА")
+        return
+    param_name: str = args[0].lower()
+    if param_name not in parameters_dict:
+        print("тоже ошыбка")
+        return
+    param_value = driver.get_parameter(param_name=param_name)
+    print(f"{param_name.capitalize()} - {param_value}")
+    return param_value
 
 
 comm_dict = {"patrol": patrol,
@@ -658,8 +631,6 @@ comm_dict = {"patrol": patrol,
              # alias name comm_to_execute
              "settings": change_settings,
              # settings key - value
-             "swim": swim,
-             # swim location_to_escape
              "char": char,
              # char
              "info": info,
@@ -687,18 +658,38 @@ comm_dict = {"patrol": patrol,
              "inv": print_inv,
              # inv
              "c": print_cage_info,
+             "с": print_cage_info,  # дубликат команды для с на латинице/кириллице
              # cage row - column
              "q": end_session,
              # q
              "bury": bury_handler,
              # bury item_img_id - level
              "loop": loop_alias,
+             # loop alias_name
+             "find_item": find_items,
+             # find_items item_id1 - item_id2
+             "find_cat": find_cats,
+             # find_cat cat_name1 - cat_nameN
+             "swim": swim_with_sleep,
+             # swim location_to_sleep - location_to_swim
+             "pathfind": pathfind_handler,
+             # pathfind row - column
+             "hit": hit,
+             "rt": rotate_arrow,
+             "en": get_energy
              }
+
+condition_list = [">", "<", "=", ">=", "<=", "!="]
 
 if __name__ == "__main__":
     config = clicker_utils.load_config()
-    settings, action_dict, alias_dict = config["settings"], config["actions"], config["aliases"]
+    settings, action_dict, alias_dict, parameters_dict = (config["settings"], config["actions"],
+                                                          config["aliases"], config["parameters"])
     print("Настройки загружены...")
+    if not settings["my_id"]:
+        print("[!!!] Параметр my_id в файле config.json не заполнен, поиск пути по клеткам \n"
+              "\t и автотренировки не будут работать! Введите settings my_id - 1, заменив 1 на ваш ID, \n"
+              "\t либо не используйте автокач ПУ в опасных локациях! Кликер ВЫЛЕТИТ и вы УТОНЕТЕ!")
 
     driver = browser_navigation.DriverWrapper(long_break_chance=settings["long_break_chance"],
                                               long_break_duration=settings["long_break_duration"],

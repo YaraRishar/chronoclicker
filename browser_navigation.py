@@ -2,6 +2,7 @@ from selenium.webdriver import Keys
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.support.select import Select
 
+import cage_utils
 import clicker_utils
 from selenium import webdriver
 from selenium_stealth import stealth
@@ -53,9 +54,9 @@ class DriverWrapper(WebDriver):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")  # windows....
         options.add_argument("--remote-debugging-port=9222")
+        options.add_argument("--auto-open-devtools-for-tabs")
         options.add_argument("user-data-dir=selenium")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
 
         if is_headless:
             options.add_argument("--headless")
@@ -191,7 +192,7 @@ class DriverWrapper(WebDriver):
             seconds = int(match_seconds[1]) * 60 + int(match_seconds[2])
         return seconds
 
-    def check_parameter(self, param_name) -> float | int:
+    def get_parameter(self, param_name) -> float | int:
         """ Проверить параметр param_name, вернуть его значение в процентах """
 
         element = self.locate_element(f"//span[@id='{param_name}']/*/*/*/descendant::*")
@@ -245,23 +246,27 @@ class DriverWrapper(WebDriver):
                         self.play_sound()
             temp_message = message_bundle
 
-    def play_sound(self, sound_url=""):
+    def play_sound(self, sound_url="https://abstract-class-shed.github.io/cwshed/chat_mention.mp3"):
+        """ Воспроизвести звук """
+
         self.switch_to.new_window("tab")
         self.get(sound_url)
         time.sleep(2)
         cw3 = self.window_handles[0]
+        self.close()
         self.switch_to.window(cw3)
 
     def is_action_active(self) -> bool:
-        """ Проверка на выволнение действия """
+        """ Проверка на выполнение действия """
 
         element = self.locate_element(xpath="//a[@id='cancel']", do_wait=False)
-        if element:
-            return True
-        return False
+        return element is not None
 
-    def move_to_location(self, location_name: str, show_availibles=True) -> bool:
-        """ Техническая функция для перехода на локацию. """
+    def move_to_location(self, location_name: str, show_availibles=False) -> bool:
+        """ Общая функция для перехода на локацию """
+
+        if self.is_held():
+            self.quit()
 
         if self.is_action_active():
             seconds = self.check_time()
@@ -396,11 +401,9 @@ class DriverWrapper(WebDriver):
 
         if not cages_with_items:
             return []
-        print("Предметы на поле:")
         for element in cages_with_items:
             style_str = element.get_attribute("style")
             items_ids.append(re.findall(pattern=r"things\/(\d*)", string=style_str))
-            print(f"Ссылка на изображение предмета: https://catwar.su/cw3/things/{items_ids[-1]}.png\n")
 
         return items_ids
 
@@ -477,3 +480,71 @@ class DriverWrapper(WebDriver):
             seconds = random.uniform(long_break_duration[0], long_break_duration[1])
             clicker_utils.print_timer(console_string="Начался долгий перерыв",
                                       seconds=seconds, turn_off_timer=self.turn_off_timer)
+
+    def has_moves(self) -> bool:
+        availible_locations = self.get_availible_locations()
+        return availible_locations is None
+
+    def is_held(self) -> bool:
+        cw3_message = self.locate_element(xpath="/html/body/div[1]/table/tbody/tr[2]/td/div[@id='block_mess']").text
+        if " держит вас во рту" in cw3_message:
+            cat_name = cw3_message.split(" держит вас во рту")[0]
+            href = self.get_cat_link(cat_name)
+            print(f"ВАС ПОДНЯЛ ИГРОК ПО ИМЕНИ {cat_name}! Ссылка на профиль: {href}")
+            self.play_sound()
+            return True
+        return False
+
+    def get_cat_link(self, cat_name) -> str:
+        """ Получить ссылку на кота по его имени (в Игровой) """
+        cat_element = self.locate_element(xpath=f"//span[@class='cat_tooltip']/u/a[text()='{cat_name}']")
+        if not cat_element:
+            return "N/A"
+        href = "catwar.su" + cat_element.get_attribute("href")
+        return href
+
+    def get_current_location(self) -> str:
+        """ Получить название локации, на которой находится игрок """
+        current_location = "[ Загружается… ]"
+        while current_location == "[ Загружается… ]":
+            current_location = self.locate_element("/html/body/div[1]/table/tbody/tr[7]/td/"
+                                                   "table/tbody/tr/td[2]/div/div/span").text
+            time.sleep(0.5)
+        return current_location
+
+    def get_inv_items(self) -> list:
+        """ Получить список id изображений всех предметов в инвентаре """
+
+        inv_elements = self.locate_elements(xpath="//div[@class='itemInMouth']/img")
+        inv_ids = []
+        for element in inv_elements:
+            style_str = element.get_attribute("src")
+            inv_ids.append(int(re.findall(pattern=r"things\/(\d*)", string=style_str)[0]))
+        return inv_ids
+
+    def get_cages_list(self) -> list[cage_utils.Cage]:
+        """ Получить список элементов всех клеток на поле """
+
+        cages_list = [cage_utils.Cage(self, row, column) for column in range(1, 11) for row in range(1, 7)]
+        return cages_list
+
+    def update_digging_log(self):
+        current_location = self.get_current_location()
+        layout = []
+        for row in range(1, 7):
+            for column in range(1, 11):
+                cage = cage_utils.Cage(self, row, column)
+                if cage.is_move():
+                    move_name = cage.get_move_name()
+                    layout.append(f"{move_name} ({row}x{column})")
+        with open("digging_log.txt", "a") as file:
+            file.write(f"Название локации: {current_location}\n")
+            file.write(f"Код переходов: {", ".join(layout)}")
+
+    def get_move_coords(self, loc_name) -> tuple:
+        cages = self.get_cages_list()
+        for cage in cages:
+            move_name = cage.get_move_name()
+            if move_name == loc_name:
+                return cage.row, cage.column
+        return -1, -1

@@ -7,6 +7,8 @@ import traceback
 
 
 def print_timer(console_string: str, seconds: float, turn_off_timer=False) -> bool:
+    """ Печатать таймер до окончания действия с подписью console_string """
+
     try:
         if turn_off_timer:
             seconds = round(seconds)
@@ -24,7 +26,7 @@ def print_timer(console_string: str, seconds: float, turn_off_timer=False) -> bo
 
 
 def get_next_index(length, index=-1, direction=1):
-    """Получить индекс следующей локации в патруле"""
+    """ Получить индекс следующей локации в патруле """
 
     index += direction
     if index == length and direction == 1:
@@ -71,3 +73,30 @@ def crash_handler(exception_type: Exception):
     with open(crash_path, "w") as crashlog:
         stacktrace = traceback.format_exc()
         crashlog.writelines(["---CHRONOCLICKER CRASHLOG---", "\n", "time: ", crash_time, "\n", stacktrace])
+
+
+def pathfind(start, end, forbidden_cages=()) -> list:
+    """ Найти кратчайший путь между двумя клетками на поле 6х10 """
+
+    directions = (-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)
+    queue = [(start, [start])]
+    visited = set()
+    visited.add(start)
+    for cell in forbidden_cages:
+        visited.add(cell)
+
+    while queue:
+        current, path = queue.pop(0)
+        if current == end:
+            return path[1:]
+
+        for direction in directions:
+            next_x = current[0] + direction[0]
+            next_y = current[1] + direction[1]
+            next_position = (next_x, next_y)
+
+            if next_x in range(1, 7) and next_y in range(1, 11) and next_position not in visited:
+                visited.add(next_position)
+                queue.append((next_position, path + [next_position]))
+    print(f"Не удалось найти путь от клетки {start} до клетки {end}!")
+    return []

@@ -573,39 +573,6 @@ def pathfind_handler(end):
     driver.print_cats()
 
 
-def rotate_arrow(args=None):
-    if args is None:
-        return
-    seconds = float(args[0])
-    driver.execute_script("window.socketClient.emit('fight rotate', true)")
-    rng_time = random.uniform(-0.1, 0.1)
-    time.sleep(seconds + rng_time)
-    print(seconds + rng_time)
-    driver.execute_script("window.socketClient.emit('fight stopRotate')")
-
-
-def hit():
-    driver.execute_script("window.socketClient.emit('fight attack', false)")
-    time.sleep(0.5)
-    get_energy()
-
-
-def get_energy():
-    red_element = driver.locate_element(xpath=f"//div[@id='arrow{settings['my_id']}']/table/tbody/tr/td[1]")
-    green_element = driver.locate_element(xpath=f"//div[@id='arrow{settings['my_id']}']/table/tbody/tr/td[2]")
-    red_style = red_element.get_attribute("style")
-    red_pixels = float(re.findall(pattern=r"width: (\d*)", string=red_style)[0])
-
-    green_style = green_element.get_attribute("style")
-    green_pixels = float(re.findall(pattern=r"width: (\d*)", string=green_style)[0])
-
-    if red_pixels:
-        print("green_pixels, red_pixels", green_pixels, red_pixels)
-        print(green_pixels / red_pixels)
-        return
-    print(1)
-
-
 def check_parameter(args=None):
     if args is None or len(args) != 1:
         print("ОШЫБКА")

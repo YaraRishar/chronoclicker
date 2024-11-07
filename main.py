@@ -325,18 +325,7 @@ def print_cage_info(args=()):
 def command_parser(comm):
     # param - сон > 30 ? go Поляна для отдыха; do Поспать : wait 1
     # loop param - сон > 30 ? go Поляна для отдыха; do Поспать : wait 1
-    has_condition: bool
-    condition = comm.split(" ? ")[0]
-    # parse condition
-    for item in condition_list:
-        if item in condition:
-            condition_comm, condition_value = condition.split(f" {item} ")
-            has_condition = True
-            break
-    # real_condition_value = condition_comm
-    level_2 = comm.split(" ? ")[1].split(" : ")
-    print("condition", condition)
-    print("level_2", level_2)
+    pass
 
 
 def multi_comm_handler(multi_comm: str):
@@ -356,7 +345,7 @@ def multi_comm_handler(multi_comm: str):
         comm_handler(comm)
 
 
-def comm_handler(comm: str):
+def comm_handler(comm: str) -> str | None:
     """ Разделить ключевое слово команды и аргументы """
 
     try:
@@ -530,25 +519,6 @@ def parse_swim_location(sleep_loc, swim_loc) -> dict:
     return loc_dict
 
 
-def swim_with_sleep(args=None):
-    if args is None or len(args) != 2:
-        print("Команда вызывается на локации для отсыпа location_to_sleep, "
-              "где есть переход на плавательную локацию location_to_swim"
-              "\nswim location_to_sleep location_to_swim")
-        return
-    sleep_loc, swim_loc = args[0], args[1]
-    loc_dict = parse_swim_location(sleep_loc, swim_loc)
-
-    sleep_param = driver.get_parameter("sleep")
-    if sleep_param > settings["critical_sleep_pixels"]:
-        do(["Поспать"])
-
-    jump_to_cage(loc_dict[sleep_loc])
-    while sleep_param < settings["critical_sleep_pixels"]:
-        do(["Поплавать"])
-        sleep_param = driver.get_parameter("sleep")
-
-
 def pathfind_handler(end):
     """ Найти путь по клеткам от вашего местоположения до end. Использование:
      pathfind row - column"""
@@ -637,16 +607,9 @@ comm_dict = {"patrol": patrol,
              # find_items item_id1 - item_id2
              "find_cat": find_cats,
              # find_cat cat_name1 - cat_nameN
-             "swim": swim_with_sleep,
-             # swim location_to_sleep - location_to_swim
              "pathfind": pathfind_handler,
              # pathfind row - column
-             "hit": hit,
-             "rt": rotate_arrow,
-             "en": get_energy
              }
-
-condition_list = [">", "<", "=", ">=", "<=", "!="]
 
 if __name__ == "__main__":
     config = clicker_utils.load_config()

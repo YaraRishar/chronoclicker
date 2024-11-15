@@ -54,7 +54,7 @@ class DriverWrapper(WebDriver):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")  # windows....
         options.add_argument("--remote-debugging-port=9222")
-        options.add_argument("--auto-open-devtools-for-tabs")
+        # options.add_argument("--auto-open-devtools-for-tabs")
         options.add_argument("user-data-dir=selenium")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
@@ -262,7 +262,7 @@ class DriverWrapper(WebDriver):
         element = self.locate_element(xpath="//a[@id='cancel']", do_wait=False)
         return element is not None
 
-    def move_to_location(self, location_name: str, show_availibles=False) -> bool:
+    def move_to_location(self, location_name: str, show_availables=False) -> bool:
         """ Общая функция для перехода на локацию """
 
         if self.is_held():
@@ -291,14 +291,14 @@ class DriverWrapper(WebDriver):
                                                      self.short_break_duration[1])
         clicker_utils.print_timer(console_string=f"Совершён переход в локацию {location_name}", seconds=seconds,
                                   turn_off_timer=self.turn_off_timer)
-        if show_availibles:
-            print(f"Доступные локации: {', '.join(self.get_availible_locations())}")
+        if show_availables:
+            print(f"Доступные локации: {', '.join(self.get_available_locations())}")
         else:
             self.trigger_long_break(self.long_break_chance, self.long_break_duration)
 
         return has_moved
 
-    def get_availible_actions(self, action_dict) -> list:
+    def get_available_actions(self, action_dict) -> list:
         """ Получить список доступных в данный момент действий """
 
         elements_self = self.locate_elements(xpath="//div[@id='akten']/a[@class='dey']")
@@ -312,7 +312,7 @@ class DriverWrapper(WebDriver):
                     break
         return actions_list
 
-    def get_availible_locations(self) -> list:
+    def get_available_locations(self) -> list:
         """ Получить список переходов на локации """
 
         elements = self.locate_elements(xpath="//span[@class='move_name']")
@@ -323,7 +323,7 @@ class DriverWrapper(WebDriver):
             except StaleElementReferenceException:
                 print("\t\tencountered stale element, retrying getloc call...")
                 time.sleep(1)
-                self.get_availible_locations()
+                self.get_available_locations()
 
         return location_list
 
@@ -482,8 +482,8 @@ class DriverWrapper(WebDriver):
                                       seconds=seconds, turn_off_timer=self.turn_off_timer)
 
     def has_moves(self) -> bool:
-        availible_locations = self.get_availible_locations()
-        return availible_locations is None
+        available_locations = self.get_available_locations()
+        return available_locations is None
 
     def is_held(self) -> bool:
         cw3_message = self.locate_element(xpath="/html/body/div[1]/table/tbody/tr[2]/td/div[@id='block_mess']").text
@@ -500,15 +500,16 @@ class DriverWrapper(WebDriver):
         cat_element = self.locate_element(xpath=f"//span[@class='cat_tooltip']/u/a[text()='{cat_name}']")
         if not cat_element:
             return "N/A"
-        href = "catwar.su" + cat_element.get_attribute("href")
+        href = "catwar.net" + cat_element.get_attribute("href")
         return href
 
     def get_current_location(self) -> str:
         """ Получить название локации, на которой находится игрок """
         current_location = "[ Загружается… ]"
         while current_location == "[ Загружается… ]":
-            current_location = self.locate_element("/html/body/div[1]/table/tbody/tr[7]/td/"
-                                                   "table/tbody/tr/td[2]/div/div/span").text
+            location_element = self.locate_element("/html/body/div[1]/table/tbody/tr[7]/td/"
+                                                   "table/tbody/tr/td[2]/div/div/span")
+            current_location = location_element.text
             time.sleep(0.5)
         return current_location
 
@@ -528,19 +529,6 @@ class DriverWrapper(WebDriver):
         cages_list = [cage_utils.Cage(self, row, column) for column in range(1, 11) for row in range(1, 7)]
         return cages_list
 
-    def update_digging_log(self):
-        current_location = self.get_current_location()
-        layout = []
-        for row in range(1, 7):
-            for column in range(1, 11):
-                cage = cage_utils.Cage(self, row, column)
-                if cage.is_move():
-                    move_name = cage.get_move_name()
-                    layout.append(f"{move_name} ({row}x{column})")
-        with open("digging_log.txt", "a") as file:
-            file.write(f"Название локации: {current_location}\n")
-            file.write(f"Код переходов: {", ".join(layout)}")
-
     def get_move_coords(self, loc_name) -> tuple:
         cages = self.get_cages_list()
         for cage in cages:
@@ -548,3 +536,19 @@ class DriverWrapper(WebDriver):
             if move_name == loc_name:
                 return cage.row, cage.column
         return -1, -1
+
+    def find_cat_on_loc(self, names_to_find) -> tuple:
+        """ Найти кота на текущей локации по имени или ID """
+
+        cages_list = self.get_cages_list()
+        for cage in cages_list:
+            if not cage.has_cat():
+                continue
+            cat_name = cage.get_cat_name()
+            cat_id = cage.get_cat_id()
+            location = self.get_current_location()
+            if cat_name in names_to_find:
+                return cat_name, location, cage.row, cage.column
+            elif cat_id in names_to_find:
+                return cat_id, location, cage.row, cage.column
+        return False, False, False, False

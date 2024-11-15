@@ -87,7 +87,7 @@ class Cage:
         element = self.driver.locate_element(xpath=xpath)
         style_str = element.get_attribute("style")
         url = re.findall(pattern=r'url\(\"(.*?)\.png', string=style_str)[0]
-        url = "https://catwar.su/" + url + ".png"
+        url = "https://catwar.net/" + url + ".png"
         return url
 
     def get_cat_size(self) -> int:
@@ -102,7 +102,7 @@ class Cage:
                  f"/div/span/span/span/u/a")
         element = self.driver.locate_element(xpath=xpath)
         cat_id: str = element.get_attribute(name="href")
-        cat_id = cat_id.replace("https://catwar.su/cat", "")
+        cat_id = cat_id.replace("https://catwar.net/cat", "")
         return cat_id
 
     def get_move_name(self) -> str:
@@ -119,7 +119,7 @@ class Cage:
             print(f"Переход на локацию {self.move_name}")
             return
         if self.items:
-            items_string = [f"https://catwar.su/cw3/things/{i}.png" for i in self.items]
+            items_string = [f"https://catwar.net/cw3/things/{i}.png" for i in self.items]
             print(f"Предметы на клетке: {", ".join(items_string)}")
         if self.cat_name:
             self.cat_rank = self.get_cat_rank()
@@ -130,7 +130,7 @@ class Cage:
                   f"Рост: {self.cat_size}%, ссылка на окрас: {self.cat_color_url}")
             self.cat_items = self.get_cat_items()
             if self.cat_items:
-                items_string = [f"https://catwar.su/cw3/things/{i}.png" for i in self.cat_items]
+                items_string = [f"https://catwar.net/cw3/things/{i}.png" for i in self.cat_items]
                 print(f"Предметы во рту: {", ".join(items_string)}")
 
     def jump(self):
@@ -166,5 +166,5 @@ class Cage:
             return False
         print("Предмет подобран! Предметы во рту:")
         for i in new_inv:
-            print(f"https://catwar.su/cw3/things/{i}.png")
+            print(f"https://catwar.net/cw3/things/{i}.png")
         return True

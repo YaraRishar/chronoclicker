@@ -49,7 +49,7 @@ def do(args=None, show_availables=True) -> bool:
             if action == "принюхаться":
                 print(driver.check_skill("smell",
                                          clicker_utils.get_key_by_value(skills_dict, "smell")))
-                driver.click(xpath="//input[@value='Вернуть поле']")
+                driver.click(xpath="//tr[@id='tr_tos']/td/table/tbody/tr/td[1]/button")
             elif action == "копать землю":
                 print(driver.check_skill("dig",
                                          clicker_utils.get_key_by_value(skills_dict, "dig")))
@@ -336,9 +336,9 @@ def print_cage_info(args=()):
 
 
 def parse_condition(comm):
-    # param сон > 30 ? go Поляна для отдыха; do Поспать : wait 1
+    # param бодрость > 30 ? go Поляна для отдыха; do Поспать : wait 1
     condition_symbols = [" > ", " < ", " == ", " >= ", " <= ", " != "]
-    condition = comm.split(" ? ")[0]  # param сон > 30
+    condition = comm.split(" ? ")[0]  # param бодрость > 30
     symbol = False
     for i in range(len(condition_symbols)):
         if condition_symbols[i] in condition:
@@ -346,7 +346,7 @@ def parse_condition(comm):
             break
     if not symbol:
         return
-    condition_comm = condition.split(symbol)  # ['param сон', '30']
+    condition_comm = condition.split(symbol)  # ['param бодрость', '30']
     expected_value = condition_comm[1]  # 30
     real_value = comm_handler(condition_comm[0])
     try:
@@ -482,11 +482,6 @@ def loop_alias(alias_name):
 
 
 def loop_comm(comm):
-    is_validated = multi_comm_handler(comm)
-    if not is_validated:
-        print("ошибка! команда была набрана неправильно или её не существует. "
-              "ну или это опять баг (время час ночи хелп)")
-        return
     while True:
         multi_comm_handler(comm)
         driver.trigger_long_break(long_break_chance=settings["long_break_chance"],
@@ -497,7 +492,7 @@ def find_items(items_to_seek=None):
     """ Искать перечисленные предметы по разным локациям, поднимать их, если найдены """
 
     if not items_to_seek:
-        print("find_items item_id - item_id")
+        print("find_item item_id - item_id")
         return
     items_to_seek = [int(item) for item in items_to_seek]
     cages_list = driver.get_cages_list()
@@ -515,11 +510,12 @@ def find_items(items_to_seek=None):
     find_items(items_to_seek)
 
 
-def find_cats(args=None):
+def find_cats(args=None) -> bool:
     """ Найти кота по его имени или ID на локациях, рандомно переходя по ним """
 
     if args is None:
         print("find_cat имя_кота")
+        return False
 
     names_to_find: list = args
     while names_to_find:
@@ -527,6 +523,8 @@ def find_cats(args=None):
         if cat_name:
             print(f"Кот {cat_name} найден в локации {location} на клетке {row}x{column}!")
             names_to_find.remove(cat_name)
+            if not names_to_find:
+                return True
             continue
         available_locations = driver.get_available_locations()
         random_location = random.sample(available_locations, 1)
@@ -558,7 +556,7 @@ def pathfind_handler(end: tuple, forbidden_cages_given=()):
 
 def check_parameter(args=None) -> float | int:
     """ Команда для проверки параметра parameter_name. Возвращает float или int - значение параметра в процентах.
-     param сон"""
+     param бодрость"""
 
     if args is None or len(args) != 1:
         print("param parameter_name")

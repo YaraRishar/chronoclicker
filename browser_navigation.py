@@ -181,12 +181,13 @@ class DriverWrapper(WebDriver):
         """ Проверить, сколько времени осталось до окончания действия.
         Если никакое действие в данный момент не выполняется, возвращает 1. """
 
-        element: WebElement = self.locate_element("//span[@id='sek']")
+        element: WebElement = self.locate_element("//div[@id='block_mess']")
+        message = element.text
         if not element:
             return 1
-        match_seconds = re.match(r"(\d*) мин (\d*) с", element.text)
+        match_seconds = re.search(r"(\d*) мин (\d*) с", message)
         if not match_seconds:
-            match_seconds = re.match(r"(\d*) с", element.text)
+            match_seconds = re.search(r"(\d*) с", message)
             seconds = int(match_seconds[1])
         else:
             seconds = int(match_seconds[1]) * 60 + int(match_seconds[2])
@@ -195,28 +196,25 @@ class DriverWrapper(WebDriver):
     def get_parameter(self, param_name) -> float | int:
         """ Проверить параметр param_name, вернуть его значение в процентах """
 
-        element = self.locate_element(f"//span[@id='{param_name}']/*/*/*/descendant::*")
+        element = self.locate_element(f"//div[@id='{param_name}']/div[@class='bar']/div[@class='bar-data']")
         if not element:
             return -1
-        pixels = float(element.get_attribute("style").split("px")[0].split("width: ")[1])
-        percents = round(pixels / 150 * 100, 2)
-        if percents == int(percents):
-            return int(percents)
-        return percents
+        percents = re.search(r": (\d*)%", element.text)
+        return percents[1]
 
-    def check_skill(self, skill_name) -> str:
+    def check_skill(self, skill_name_server, skill_name) -> str:
         """ Проверить уровень и дробь навыка """
 
-        tooltip_elem = self.locate_element("//div[@id='tiptip_content']")
-        level_elem = self.locate_element(f"//table[@id='{skill_name}_table']", do_wait=False)
+        self.mouse_over(xpath=f"//div[@id='{skill_name_server}']", hover_for=random.uniform(0.1, 0.2))
+        skill_name = skill_name[0].upper() + skill_name[1:]
+        xpath = f"//div[@class='tooltip-inner' and contains(text(), '{skill_name}')]"
+        tooltip_elem = self.locate_element(xpath=xpath)
+        text = tooltip_elem.text if tooltip_elem else ""
+        level_elem = self.locate_element(f"//div[@id='{skill_name_server}']/div[3]", do_wait=False)
         if not level_elem:
             return ""
-        self.mouse_over(xpath=f"//span[@id='{skill_name}']/*/*/*/descendant::*")
-        if not tooltip_elem.text:
-            self.mouse_over(xpath=f"//span[@id='{skill_name}']/*/*/*/descendant::*", hover_for=0.01)
-        if skill_name in tooltip_elem.text:
-            return tooltip_elem.text + ", уровень " + level_elem.text
-        return tooltip_elem.text + ", уровень " + level_elem.text
+        self.mouse_over(xpath=f"//div[@id='{skill_name_server}']", hover_for=0.01)
+        return text + ", уровень " + level_elem.text
 
     def get_last_cw3_message(self) -> tuple:
         """ Получить последнее сообщение в чате Игровой и имя написавшего """
@@ -301,9 +299,7 @@ class DriverWrapper(WebDriver):
     def get_available_actions(self, action_dict) -> list:
         """ Получить список доступных в данный момент действий """
 
-        elements_self = self.locate_elements(xpath="//div[@id='akten']/a[@class='dey']")
-        elements_others = self.locate_elements(xpath="//div[@id='dein']/a[@class='dey']")
-        elements = elements_self + elements_others
+        elements = self.locate_elements(xpath="//div[@id='akten']/a[@class='dey has-tooltip']")
         actions_list = []
         for element in elements:
             for key, value in action_dict.items():
@@ -486,7 +482,10 @@ class DriverWrapper(WebDriver):
         return available_locations is None
 
     def is_held(self) -> bool:
-        cw3_message = self.locate_element(xpath="/html/body/div[1]/table/tbody/tr[2]/td/div[@id='block_mess']").text
+        cw3_message_element = self.locate_element(xpath="/html/body/div[1]/table/tbody/tr[2]/td/div[@id='block_mess']")
+        if not cw3_message_element:
+            return False
+        cw3_message = cw3_message_element.text
         if " держит вас во рту" in cw3_message:
             cat_name = cw3_message.split(" держит вас во рту")[0]
             href = self.get_cat_link(cat_name)
@@ -542,8 +541,6 @@ class DriverWrapper(WebDriver):
 
         cages_list = self.get_cages_list()
         for cage in cages_list:
-            if not cage.has_cat():
-                continue
             cat_name = cage.get_cat_name()
             cat_id = cage.get_cat_id()
             location = self.get_current_location()
@@ -552,3 +549,6 @@ class DriverWrapper(WebDriver):
             elif cat_id in names_to_find:
                 return cat_id, location, cage.row, cage.column
         return False, False, False, False
+
+    def get_weight(self):
+        pass

@@ -1,3 +1,4 @@
+import re
 import time
 import random
 import os.path
@@ -33,9 +34,10 @@ def do(args=None, show_availables=True) -> bool:
             print(f"Действие {action} не может быть выполнено. Возможно, действие недоступно/"
                   f"страница не прогрузилась до конца.\nДоступные действия: {', '.join(available_actions)}.")
             continue
-        success = driver.click(xpath=f"//a[@data-id={action_dict[action]}][@class='dey']/img",
+        success = driver.click(xpath=f"//a[@data-id={action_dict[action]}][@class='dey has-tooltip']/img",
                                offset_range=(30, 30))
         if success:
+            # time.sleep(random.uniform(0.1, 1))
             seconds = driver.check_time() + random.uniform(settings["short_break_duration"][0],
                                                            settings["short_break_duration"][1])
             last_hist_entry = driver.locate_element("//span[@id='ist']").text.split(".")[-2]
@@ -45,12 +47,15 @@ def do(args=None, show_availables=True) -> bool:
             if do_cancel:
                 cancel()
             if action == "принюхаться":
-                print(driver.check_skill("smell"))
+                print(driver.check_skill("smell",
+                                         clicker_utils.get_key_by_value(skills_dict, "smell")))
                 driver.click(xpath="//input[@value='Вернуть поле']")
             elif action == "копать землю":
-                print(driver.check_skill("dig"))
+                print(driver.check_skill("dig",
+                                         clicker_utils.get_key_by_value(skills_dict, "dig")))
             elif action == "поплавать":
-                print(driver.check_skill("swim"))
+                print(driver.check_skill("swim",
+                                         clicker_utils.get_key_by_value(skills_dict, "swim")))
 
             if show_availables:
                 print(f"Доступные действия: {', '.join(driver.get_available_actions(action_dict))}")
@@ -121,12 +126,13 @@ def info() -> bool:
           f"Доступные локации: {', '.join(driver.get_available_locations())}\n"
           f"Доступные действия: {', '.join(driver.get_available_actions(action_dict))}")
     driver.print_cats()
-    print(f"\t Сонливость:\t{driver.get_parameter('dream')}%\n"
+    print(f"\t Здоровье:\t{driver.get_parameter('health')}%\n"
+          f"\t Бодрость:\t{driver.get_parameter('dream')}%\n"
+          f"\t Чистота: \t{driver.get_parameter('clean')}%\n"
           f"\t Голод:\t\t{driver.get_parameter('hunger')}%\n"
           f"\t Жажда:\t\t{driver.get_parameter('thirst')}%\n"
-          f"\t Нужда:\t\t{driver.get_parameter('need')}%\n"
-          f"\t Здоровье:\t{driver.get_parameter('health')}%\n"
-          f"\t Чистота: \t{driver.get_parameter('clean')}%")
+          f"\t Нужда:\t\t{driver.get_parameter('need')}%")
+
     print("Последние 5 записей в истории (введите hist, чтобы посмотреть полную историю):")
     hist_list = driver.get_hist_list()
     print(f"\t{'.\n\t'.join(hist_list[-6:])}.")
@@ -147,12 +153,19 @@ def char() -> bool:
           f"ID: {driver.locate_element('''//b[@id='id_val']''').text}\n"
           f"Активность: {driver.locate_element('''//div[@id='act_name']/b''').text}")
     driver.back()
-    print(f"{driver.check_skill('smell')}\n"
-          f"{driver.check_skill('dig')}\n"
-          f"{driver.check_skill('swim')}\n"
-          f"{driver.check_skill('might')}\n"
-          f"{driver.check_skill('tree')}\n"
-          f"{driver.check_skill('observ')}")
+
+    print(driver.check_skill("smell",
+                             clicker_utils.get_key_by_value(skills_dict, "smell")))
+    print(driver.check_skill("dig",
+                             clicker_utils.get_key_by_value(skills_dict, "dig")))
+    print(driver.check_skill("swim",
+                             clicker_utils.get_key_by_value(skills_dict, "swim")))
+    print(driver.check_skill("might",
+                             clicker_utils.get_key_by_value(skills_dict, "might")))
+    print(driver.check_skill("tree",
+                             clicker_utils.get_key_by_value(skills_dict, "tree")))
+    print(driver.check_skill("observ",
+                             clicker_utils.get_key_by_value(skills_dict, "observ")))
     return True
 
 
@@ -248,7 +261,7 @@ def wait_for(seconds=None) -> bool:
         return False
     if len(seconds) == 1:
         clicker_utils.print_timer(console_string="Начато ожидание",
-                                  seconds=seconds[0],
+                                  seconds=float(seconds[0]),
                                   turn_off_timer=driver.turn_off_timer)
         return True
     try:
@@ -447,22 +460,35 @@ def jump_to_cage(args=None, verbose=True) -> int:
     return 0
 
 
-def loop_alias(args=None):
+def loop_handler(args=None):
     """ Повторять сокращение или команду бесконечно (как команда patrol и repeat)
      loop alias_name
      """
     if args is None:
-        print("Введите название сокращения. Пример: loop название_сокращения")
+        print("Введите название сокращения или команду. Пример: loop do принюхаться - копать землю")
         return
-    alias_name = args[0]
-    if alias_name in alias_dict.keys():
-        while True:
-            multi_comm_handler(alias_dict[alias_name])
-            driver.trigger_long_break(long_break_chance=settings["long_break_chance"],
-                                      long_break_duration=settings["long_break_duration"])
+    if args[0] in alias_dict.keys():
+        alias_name = args[0]
+        loop_alias(alias_name)
+    comm = " - ".join(args)
+    loop_comm(comm)
 
+
+def loop_alias(alias_name):
     while True:
-        multi_comm_handler(alias_name)
+        multi_comm_handler(alias_dict[alias_name])
+        driver.trigger_long_break(long_break_chance=settings["long_break_chance"],
+                                  long_break_duration=settings["long_break_duration"])
+
+
+def loop_comm(comm):
+    is_validated = multi_comm_handler(comm)
+    if not is_validated:
+        print("ошибка! команда была набрана неправильно или её не существует. "
+              "ну или это опять баг (время час ночи хелп)")
+        return
+    while True:
+        multi_comm_handler(comm)
         driver.trigger_long_break(long_break_chance=settings["long_break_chance"],
                                   long_break_duration=settings["long_break_duration"])
 
@@ -507,7 +533,7 @@ def find_cats(args=None):
         go(random_location)
 
 
-def pathfind_handler(end:tuple, forbidden_cages_given=()):
+def pathfind_handler(end: tuple, forbidden_cages_given=()):
     """ Найти путь по клеткам от вашего местоположения до end. Использование:
      pathfind row - column"""
 
@@ -516,7 +542,7 @@ def pathfind_handler(end:tuple, forbidden_cages_given=()):
     if end_cage.is_move() or end_cage.has_cat():
         print(f"Клетка {end} занята котом или переходом!")
         return
-    my_coords = find_my_coords()
+    my_coords = find_my_coords(verbose=False)
     cages = driver.get_cages_list()
     forbidden_cages = [_ for _ in forbidden_cages_given]
 
@@ -547,10 +573,30 @@ def check_parameter(args=None) -> float | int:
     return param_value
 
 
+def check_skill(args=None) -> int:
+    """ Команда для проверки навыка skill_name. Возвращает fint - значение дроби навыка ('числитель').
+     skill ун """
+
+    if args is None or len(args) != 1:
+        print("skill аббревиатура_навыка")
+        return -1
+    skill_name: str = args[0].strip().lower()
+    if skill_name not in skills_dict:
+        print("Невалидное имя навыка! Примеры: нюх, копание, боевые умения, "
+              "плавательные умения, зоркость, лазание")
+        return -1
+    skill_name_server = skills_dict[skill_name]
+    skill_value = driver.check_skill(skill_name_server, skill_name)
+    print(skill_value)
+    skill_fraction = re.search(r"\((\d*)/", skill_value)
+    if not skill_fraction:
+        return -1
+    return int(skill_fraction[1])
+
+
 def count_cw3_messages() -> int:
     chatbox = driver.locate_element(xpath="//div[@id='chat_msg']")
     msg_list = chatbox.find_elements(By.XPATH, value="//span/table/tbody/tr/td/span")
-    print(len(msg_list), "cw3 messages!")
     return len(msg_list)
 
 
@@ -562,7 +608,6 @@ def get_last_cw3_message_volume() -> int:
         return -1
     volume_str = msg_element.get_attribute("class")
     volume = int("".join([i for i in volume_str if i.isdigit()]))
-    print("vol", volume)
     return volume
 
 
@@ -576,9 +621,12 @@ def check_for_warning() -> bool:
     return False
 
 
-def find_my_coords() -> (int, int):
+def find_my_coords(verbose=True) -> (int, int):
     my_info = driver.find_cat_on_loc(settings["my_id"])
     my_coords = my_info[2:]
+    if verbose:
+        current_location = driver.get_current_location()
+        print(f"Вы находитесь на локации «{current_location}» на клетке {my_coords[0]}x{my_coords[1]}.")
     return my_coords
 
 
@@ -586,16 +634,23 @@ def check_cage(cage_to_check: tuple, max_checks=10) -> int:
     """ *CONSTRUCTION NOISES* """
 
     checks = 0
-    safe_cage = find_my_coords()
+    safe_cage = find_my_coords(verbose=False)
     current_msg_count = count_cw3_messages()
     danger_level = -2
     while checks < max_checks:
-        jump_to_cage(cage_to_check)
+        jump_to_cage(cage_to_check, verbose=False)
         last_msg_count = count_cw3_messages()
         if last_msg_count > current_msg_count:
             danger_level = get_last_cw3_message_volume()
             break
+        wait_for([1, 2])
+        jump_to_cage(safe_cage, verbose=False)
+    print("danger_level", danger_level)
     return danger_level
+
+
+def map_field():
+    pass
 
 
 comm_dict = {"patrol": patrol,
@@ -641,7 +696,7 @@ comm_dict = {"patrol": patrol,
              # q
              "bury": bury_handler,
              # bury item_img_id - level
-             "loop": loop_alias,
+             "loop": loop_handler,
              # loop alias_name
              "find_item": find_items,
              # find_items item_id1 - item_id2
@@ -651,12 +706,15 @@ comm_dict = {"patrol": patrol,
              # pathfind row - column
              "param": check_parameter,
              # param param_name
+             "skill": check_skill,
+             "findme": find_my_coords,
              }
 
 if __name__ == "__main__":
     config = clicker_utils.load_config()
-    settings, action_dict, alias_dict, parameters_dict = (config["settings"], config["actions"],
-                                                          config["aliases"], config["parameters"])
+    settings, action_dict, alias_dict, parameters_dict, skills_dict = (config["settings"], config["actions"],
+                                                                       config["aliases"], config["parameters"],
+                                                                       config["skills"])
     print("Настройки загружены...")
     if not settings["my_id"]:
         print("[!!!] Параметр my_id в файле config.json не заполнен, поиск пути по клеткам \n"
@@ -674,6 +732,9 @@ if __name__ == "__main__":
 
     print(f"Игровая загружается, если прошло более {settings['max_waiting_time'] * 10} секунд - перезапустите кликер.")
     driver.get("https://catwar.net/cw3/")  # vibecheck https://bot.sannysoft.com/
+    # check_cage((1, 2))
+    # check_cage((1, 1))
+    # check_cage((1, 3))
 
     if driver.current_url != "https://catwar.net/cw3/":
         print("Для включения кликера вам необходимо залогиниться в варовский аккаунт.\n"

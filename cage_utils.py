@@ -18,6 +18,7 @@ class Cage:
         self.has_move: bool = False
         self.move_name: str = ""
         self.cat_name: str = ""
+        self.cat_id: str = ""
         self.cat_rank: str = ""
         self.cat_smell: int = -1
         self.cat_items: [str] = ()
@@ -50,7 +51,9 @@ class Cage:
 
     def get_cat_name(self) -> str:
         element = self.driver.locate_element(xpath=f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]"
-                                                   f"/div/span/span/span[@class='cat_tooltip']/u/a")
+                                                   f"/div/span/span/span[@class='cat_tooltip']/u/a", do_wait=False)
+        if not element:
+            return ""
         cat_name = element.get_attribute(name="innerText")
         return cat_name
 
@@ -101,6 +104,8 @@ class Cage:
         xpath = (f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]"
                  f"/div/span/span/span/u/a")
         element = self.driver.locate_element(xpath=xpath)
+        if not element:
+            return ""
         cat_id: str = element.get_attribute(name="href")
         cat_id = cat_id.replace("https://catwar.net/cat", "")
         return cat_id

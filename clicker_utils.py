@@ -100,3 +100,8 @@ def pathfind(start, end, forbidden_cages=()) -> list:
                 queue.append((next_position, path + [next_position]))
     print(f"Не удалось найти путь от клетки {start} до клетки {end}!")
     return []
+
+
+def get_key_by_value(dictionary: dict, look_for):
+    result = next((key for key, value in dictionary.items() if value == look_for), None)
+    return result

@@ -714,7 +714,7 @@ if __name__ == "__main__":
                                                                        config["aliases"], config["parameters"],
                                                                        config["skills"])
     print("Настройки загружены...")
-    if not settings["my_id"]:
+    if settings["my_id"] == "1":
         print("[!!!] Параметр my_id в файле config.json не заполнен, поиск пути по клеткам \n"
               "\t и (в будущем) автотренировки не будут работать! Введите settings my_id - 1, заменив 1 на ваш ID, \n"
               "\t либо не используйте автокач ПУ в опасных локациях! Кликер ВЫЛЕТИТ и вы УТОНЕТЕ!")

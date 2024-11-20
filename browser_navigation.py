@@ -543,10 +543,11 @@ class DriverWrapper(WebDriver):
         for cage in cages_list:
             cat_name = cage.get_cat_name()
             cat_id = cage.get_cat_id()
-            location = self.get_current_location()
             if cat_name in names_to_find:
+                location = self.get_current_location()
                 return cat_name, location, cage.row, cage.column
             elif cat_id in names_to_find:
+                location = self.get_current_location()
                 return cat_id, location, cage.row, cage.column
         return False, False, False, False
 

@@ -620,7 +620,7 @@ def check_for_warning() -> bool:
 
 
 def find_my_coords(verbose=True) -> (int, int):
-    my_info = driver.find_cat_on_loc(settings["my_id"])
+    my_info = driver.find_cat_on_loc([settings["my_id"]])
     my_coords = my_info[2:]
     if verbose:
         current_location = driver.get_current_location()

@@ -50,8 +50,8 @@ class Cage:
         return bool(cat)
 
     def get_cat_name(self) -> str:
-        element = self.driver.locate_element(xpath=f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]"
-                                                   f"/div/span/span/span[@class='cat_tooltip']/u/a", do_wait=False)
+        xpath = f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/div/span/span/span/u/a"
+        element = self.driver.locate_element(xpath=xpath, do_wait=False)
         if not element:
             return ""
         cat_name = element.get_attribute(name="innerText")
@@ -101,8 +101,7 @@ class Cage:
         return size
 
     def get_cat_id(self):
-        xpath = (f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]"
-                 f"/div/span/span/span/u/a")
+        xpath = f"//table[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]/div/span/span/span/u/a"
         element = self.driver.locate_element(xpath=xpath)
         if not element:
             return ""
@@ -131,7 +130,8 @@ class Cage:
             self.cat_status = self.get_cat_status()
             self.cat_size = self.get_cat_size()
             self.cat_color_url = self.get_cat_color_url()
-            print(f"{self.cat_name}: {self.cat_rank} | {self.cat_status}\n"
+            self.cat_id = self.get_cat_id()
+            print(f"{self.cat_name} ({self.cat_id}): {self.cat_rank} | {self.cat_status}\n"
                   f"Рост: {self.cat_size}%, ссылка на окрас: {self.cat_color_url}")
             self.cat_items = self.get_cat_items()
             if self.cat_items:

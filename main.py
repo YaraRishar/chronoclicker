@@ -752,8 +752,8 @@ while command != "q":
     except (KeyboardInterrupt, ProtocolError):
         end_session()
         break
-    # except Exception as exception:
-    #     print(type(exception).__name__)
-    #     clicker_utils.crash_handler(exception)
-    #     end_session()
-    #     break
+    except Exception as exception:
+        print(type(exception).__name__)
+        clicker_utils.crash_handler(exception)
+        end_session()
+        break

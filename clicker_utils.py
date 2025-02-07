@@ -62,17 +62,18 @@ def rewrite_config(new_config: dict):
 def crash_handler(exception_type: Exception):
     """ Создать крашлог в папке crashlogs, которая находится на том же уровне, что и main.py """
 
-    print("crash handler called!")
     now = datetime.datetime.now()
     crash_time = now.strftime("%y-%m-%d_%H.%M.%S")
     path = os.path.dirname(__file__)
     if not os.path.exists(f"{path}/crashlogs"):
         os.mkdir(f"{path}/crashlogs")
     crash_path = os.path.join(path, f"crashlogs/crash-{crash_time}.txt")
-    print(f"Кликер вылетел, exception: {type(exception_type).__name__}. Крашлог находится по пути {crash_path}")
+    print(f"Кликер вылетел, тип ошибки: {type(exception_type).__name__}. Крашлог находится по пути {crash_path}")
     with open(crash_path, "w") as crashlog:
         stacktrace = traceback.format_exc()
-        crashlog.writelines(["---CHRONOCLICKER CRASHLOG---", "\n", "time: ", crash_time, "\n", stacktrace])
+        crashlog.writelines(["---CHRONOCLICKER CRASHLOG---", "\n", "Time: ", crash_time, "\n",
+
+                            stacktrace])
 
 
 def pathfind(start, end, forbidden_cages=()) -> list:

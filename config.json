@@ -10,11 +10,11 @@
             10
         ],
         "critical_sleep_pixels": 40,
-        "is_headless": false,
+        "is_headless": true,
         "driver_path": "",
         "max_waiting_time": 1,
         "turn_off_dynamic_timer": false,
-        "my_id": "1526275"
+        "my_id": ""
     },
     "actions": {
         "поспать": 1,

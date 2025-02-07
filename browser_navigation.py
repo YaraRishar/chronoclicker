@@ -59,7 +59,7 @@ class DriverWrapper(WebDriver):
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
         if is_headless:
-            options.add_argument("--headless")
+            options.add_argument("--headless=new")
             print("Запуск в фоновом режиме... Может занять некоторое время.")
         else:
             print("Вебдрайвер запускается, может занять некоторое время...")
@@ -70,7 +70,9 @@ class DriverWrapper(WebDriver):
             print(f"Вебдрайвер запущен, путь {driver_path}")
         else:
             super().__init__(options=options)
-            print("Вебдрайвер запущен.")
+            print("Вебдрайвер запущен... ", end="")
+        print(f"Версия Chrome: {self.capabilities['browserVersion']}")
+        self.command_executor.set_timeout(1000)
 
         stealth(self,
                 languages=["en-US", "en"],
@@ -182,9 +184,9 @@ class DriverWrapper(WebDriver):
         Если никакое действие в данный момент не выполняется, возвращает 1. """
 
         element: WebElement = self.locate_element("//div[@id='block_mess']")
-        message = element.text
         if not element:
             return 1
+        message = element.text
         match_seconds = re.search(r"(\d*) мин (\d*) с", message)
         if not match_seconds:
             match_seconds = re.search(r"(\d*) с", message)

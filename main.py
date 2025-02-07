@@ -64,7 +64,7 @@ def do(args=None, show_availables=True) -> bool:
     return True
 
 
-def patrol(args=None) -> bool:
+def patrol(args=None):
     """Команда перехода, маршрут повторяется бесконечно
     (для маршрута из 3 локаций: 1 - 2 - 3 - 2 - 1 - 2 - 3 и так далее). Использование:
     patrol имя_локации1 - имя_локации2 - имя_локации3"""
@@ -241,7 +241,7 @@ def change_settings(args=None) -> bool:
         return False
     key, value = args
     try:
-        if key == "is_headless" or key == "driver_path" or key == "my_id":
+        if key == "driver_path" or key == "my_id":
             config["settings"][key] = value
         else:
             config["settings"][key] = eval(value)
@@ -364,7 +364,7 @@ def parse_condition(comm):
         multi_comm_handler(ternary_list[1])
 
 
-def multi_comm_handler(multi_comm: str) -> bool:
+def multi_comm_handler(multi_comm: str):
     """ Исполнить каждую команду в мультикоманде по очереди """
 
     if not multi_comm:
@@ -510,7 +510,7 @@ def find_items(items_to_seek=None):
     find_items(items_to_seek)
 
 
-def find_cats(args=None) -> bool:
+def find_cats(args=None):
     """ Найти кота по его имени или ID на локациях, рандомно переходя по ним """
 
     if args is None:
@@ -730,9 +730,6 @@ if __name__ == "__main__":
 
     print(f"Игровая загружается, если прошло более {settings['max_waiting_time'] * 10} секунд - перезапустите кликер.")
     driver.get("https://catwar.net/cw3/")  # vibecheck https://bot.sannysoft.com/
-    # check_cage((1, 2))
-    # check_cage((1, 1))
-    # check_cage((1, 3))
 
     if driver.current_url != "https://catwar.net/cw3/":
         print("Для включения кликера вам необходимо залогиниться в варовский аккаунт.\n"

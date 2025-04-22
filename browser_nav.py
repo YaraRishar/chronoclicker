@@ -78,14 +78,13 @@ class DriverWrapper(WebDriver):
         self.get("https://catwar.net/cw3/")
         if self.current_url != "https://catwar.net/cw3/":
             self.logger.info("Для включения кликера вам необходимо залогиниться в варовский аккаунт.\n"
-                  "ВНИМАНИЕ: все ваши данные (почта и пароль) "
-                  "сохраняются в папке selenium (либо в профилях chrome),"
-                  " она создаётся в той же папке, "
-                  "куда вы поместили этот скрипт (main.py). НЕ ОТПРАВЛЯЙТЕ НИКОМУ папку selenium, \n"
-                  "для работы кликера нужен main.py, browser_nav.py, clicker_utils.py и config.json.\n"
-                  "Все команды кликера работают ИЗ ИГРОВОЙ!")
+                             "ВНИМАНИЕ: все ваши данные (почта и пароль) "
+                             "сохраняются в папке selenium (либо в профилях chrome), "
+                             "она создаётся в той же папке, куда вы поместили этот "
+                             "скрипт. НЕ ОТПРАВЛЯЙТЕ НИКОМУ папку selenium. \n"
+                             "Все команды кликера работают ИЗ ИГРОВОЙ!")
         elif self.current_url == "https://catwar.net/cw3/" and not self.settings["is_headless"]:
-            self.logger.info("Кликер может зависнуть, если окно браузера не в фокусе. Чтобы этого избежать, "
+            self.logger.info("\t\t[!!!] Кликер может зависнуть, если окно браузера не в фокусе. Чтобы этого избежать, "
                              "пропишите команду settings is_headless - True")
 
     async def locate_element(self, xpath: str, do_wait=True) -> WebElement | None:

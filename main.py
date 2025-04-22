@@ -21,6 +21,9 @@ from clicker_utils import get_text
 class ChronoclickerGUI:
     def __init__(self):
         now = datetime.datetime.now()
+        folders = ["logs", "crashlogs", "resources"]
+        for folder in folders:
+            os.makedirs(folder, exist_ok=True)
         self.logfile_path = "logs//" + now.strftime("%y-%m-%d_%H.%M.%S") + ".log"
         self.logger = logging.getLogger("DriverLogger")
         format_log = "%(asctime)s | %(message)s"

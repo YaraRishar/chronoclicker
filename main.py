@@ -1,756 +1,938 @@
-import re
-import time
+import asyncio
+import datetime
+import logging
+import os
 import random
-import os.path
+import re
+import tkinter as tk
+from functools import partial
+from threading import Thread
+from tkinter import ttk, scrolledtext, StringVar
 
+from selenium.webdriver import Keys
 from selenium.webdriver.common.by import By
-from urllib3.exceptions import ProtocolError
-import browser_navigation
-import clicker_utils
+
 import cage_utils
+import clicker_utils
+from browser_nav import DriverWrapper
+from clicker_utils import get_text
 
 
-def do(args=None, show_availables=True) -> bool:
-    """Команда для исполнения последовательности действий 1 раз. Использование:
-    do действие1 - действие2 - действие3"""
+class ChronoclickerGUI:
+    def __init__(self):
+        now = datetime.datetime.now()
+        self.logfile_path = "logs//" + now.strftime("%y-%m-%d_%H.%M.%S") + ".log"
+        self.logger = logging.getLogger("DriverLogger")
+        format_log = "%(asctime)s | %(message)s"
+        logging.basicConfig(filename=self.logfile_path,
+                            level=logging.INFO,
+                            format=format_log,
+                            datefmt="%H:%M:%S")
+        self.logger.info(f"Создан новый .log файл на пути: {self.logfile_path}")
 
-    if driver.is_held():
-        driver.quit()
-        return False
-    if args is None:
-        print("Для действия нужны аргументы. Наберите help для вывода дополнительной информации.")
-        return False
-    for action in args:
-        action = action.strip().lower()
-        available_actions = driver.get_available_actions(action_dict)
-        if driver.is_action_active():
-            action_active_sec = driver.check_time()
-            print(f"Действие уже совершается! Чтобы отменить, введите cancel.\n"
-                  f"(До окончания действия осталось {action_active_sec // 60} мин {action_active_sec % 60} сек)")
-            if not show_availables:
-                wait_for([action_active_sec, action_active_sec + driver.short_break_duration[1]])
+        self.script_task = None
+        self.last_log_idx = 0
+
+        self.config = clicker_utils.load_json("config.json")
+        self.comm_dict = {
+            "aliases": self.print_aliases,
+            "patrol": self.patrol,
+            # patrol  location1 - locationN
+            "go": self.go,
+            # go  location1 - locationN
+            "do": self.do,
+            # do action1 - actionN
+            "alias": self.create_alias,
+            # alias name comm_to_execute
+            "settings": self.change_settings,
+            # settings key - value
+            "char": self.char,
+            # char
+            "info": self.info,
+            # info
+            "hist": self.hist,
+            # hist
+            "help": self.print_readme,
+            # help
+            "clear_hist": self.clear_hist,
+            # clear_hist
+            "refresh": self.refresh,
+            # refresh
+            "say": self.text_to_chat,
+            # say message
+            "cancel": self.cancel,
+            # cancel
+            "jump": self.jump_to_cage,
+            # jump row - column
+            "wait": self.wait,
+            # wait seconds_from - seconds_to
+            "rabbit_game": self.start_rabbit_game,
+            # rabbit_game number_of_games_to_play
+            "balance": self.print_rabbits_balance,
+            # balance
+            "inv": self.print_inv,
+            # inv
+            "c": self.print_cage_info,
+            "с": self.print_cage_info,  # дубликат команды для с на латинице/кириллице
+            # cage row - column
+            "q": self.end_session,
+            # q
+            "bury": self.bury_handler,
+            # bury item_img_id - level
+            "loop": self.loop_handler,
+            # loop alias_name
+            "find_item": self.find_items,
+            # find_items item_id1 - item_id2
+            "find_cat": self.find_cats,
+            # find_cat cat_name1 - cat_nameN
+            "pathfind": self.pathfind_handler,
+            # pathfind row - column
+            "param": self.check_parameter,
+            # param param_name
+            "skill": self.check_skill,
+            "findme": self.find_my_coords,
+        }
+        self.settings, self.alias_dict = self.config["settings"], self.config["aliases"]
+        gamedata = clicker_utils.load_json("gamedata.json")
+        self.action_dict, self.parameters_dict, self.skills_dict = (
+            gamedata["actions"], gamedata["parameters"], gamedata["skills"])
+
+        self.pause_event = asyncio.Event()
+        self.stop_event = asyncio.Event()
+
+        self.driver_loop = asyncio.new_event_loop()
+        Thread(target=self.start_driver_loop, daemon=True).start()
+
+        self.root = tk.Tk()
+        self.root.iconphoto(False, tk.PhotoImage(file="icon.png"))
+        self.root.title("chronoclicker")
+        # ttk.Style().configure("TButton", relief="flat", background="#ccc")
+
+        self.log_area = scrolledtext.ScrolledText(self.root)
+        self.log_area.config(wrap=tk.WORD, state="disabled", font="Verdana")
+        self.comm_entry = ttk.Entry(self.root, width=50, font="Verdana")
+
+        self.ok_btn = ttk.Button(self.root, text="OK", width=5,
+                                 command=lambda: asyncio.run_coroutine_threadsafe(self.run_script(), self.driver_loop))
+        self.pause_btn = ttk.Button(self.root, text=u"\u23F8", width=5,
+                                    command=self.pause_script, state=tk.NORMAL)
+        self.resume_btn = ttk.Button(self.root, text=u"\u23F5", width=5,
+                                     command=self.resume_script, state=tk.DISABLED)
+        self.reload_btn = ttk.Button(self.root, text=u"\u27F3", width=5,
+                                     command=lambda: partial(self.root.after, 0, self.update_log)(),
+                                     state=tk.NORMAL)
+        self.stop_btn = ttk.Button(self.root, text=u"\u23F9", width=5,
+                                   command=self.stop_event.set, state=tk.NORMAL)
+        self.timer = StringVar()
+        self.timer.set("Действие не выполняется.")
+        self.timer_label = ttk.Label(self.root, textvariable=self.timer, font="Verdana")
+
+        tk.Misc.rowconfigure(self.root, 0, weight=1)
+        tk.Misc.columnconfigure(self.root, 0, weight=1)
+        self.log_area.grid(column=0, columnspan=5, row=0, rowspan=3, padx=10, pady=10)
+        self.comm_entry.grid(column=0, row=4)
+        self.timer_label.grid(column=0, row=3, padx=5)
+        self.reload_btn.grid(column=2, row=3, padx=5)
+        self.pause_btn.grid(column=3, row=3, padx=5)
+        self.resume_btn.grid(column=3, row=4, padx=5)
+        self.ok_btn.grid(column=1, row=4, padx=5, pady=10)
+        self.stop_btn.grid(column=2, row=4)
+
+        self.driver = None
+        asyncio.run_coroutine_threadsafe(self.open_browser(), self.driver_loop)
+        asyncio.run_coroutine_threadsafe(self.run_script(comm_str="info"), self.driver_loop)
+
+        partial(self.root.after, 0, self.update_log)()
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.root.mainloop()
+
+    def update_log(self):
+        with open(self.logfile_path, 'rb') as file:
+            file.seek(self.last_log_idx)
+            new_lines = []
+            for line in file:
+                decoded_line = line.decode('utf-8').rstrip('\n')
+                new_lines.append(decoded_line + '\n')
+            self.last_log_idx = file.tell()
+            if not new_lines:
+                return
+            self.log_area.config(state="normal")
+            self.log_area.insert(tk.END, "".join(new_lines))
+            self.log_area.see(tk.END)
+            self.log_area.config(state="disabled")
+
+    def start_driver_loop(self):
+        asyncio.set_event_loop(self.driver_loop)
+        self.driver_loop.run_forever()
+
+    async def open_browser(self):
+        self.driver: DriverWrapper = DriverWrapper(self.logger)
+        self.ok_btn["state"] = tk.NORMAL
+
+    async def run_script(self, comm_str=None):
+        self.pause_event.clear()
+        self.stop_event.clear()
+        self.comm_entry.select_clear()
+
+        if comm_str is None:
+            comm_str = self.comm_entry.get()
+            self.logger.info(f">>> {comm_str}")
+            self.comm_entry.delete(0, tk.END)
+        self.script_task = asyncio.run_coroutine_threadsafe(
+            self.parse_command(comm_str),
+            self.driver_loop)
+
+    async def wait_for(self, start, end=None, do_random=True):
+        if not do_random:
+            await asyncio.sleep(start)
+            await self.check_paused(0.01)
+            return
+        if end is None:
+            end = start + start / 10
+        await self.check_paused(0.1)
+        seconds = random.uniform(start, end)
+        await asyncio.sleep(seconds)
+        await self.check_paused(0.1)
+
+    async def print_timer(self, seconds: float, console_string=None):
+        """ Печатать таймер до окончания действия с подписью console_string """
+
+        if console_string is not None:
+            for i in range(round(seconds), -1, -1):
+                if self.stop_event.is_set() or self.script_task is None:
+                    break
+                self.timer.set(f"{console_string}. Осталось {i // 60} мин {i % 60} с.")
+                await self.wait_for(1, do_random=False)
+            self.timer.set("Действие не выполняется.")
+            return
+
+        message = await self.driver.get_action_str()
+        message = message.replace("Отменить", "Введите cancel, чтобы отменить.")
+        for i in range(round(seconds), -1, -1):
+            if self.stop_event.is_set() or self.script_task is None:
+                break
+
+            console_string = re.sub(r"(\d*) мин", f"{i // 60} мин", message)
+            console_string = re.sub(r"(\d*) с", f"{i % 60} с", console_string)
+            self.timer.set(console_string)
+            await self.wait_for(1, do_random=False)
+        self.timer.set("Действие не выполняется.")
+
+    async def trigger_long_break(self):
+        """ Включение долгого перерыва после действия/перехода """
+
+        if random.random() < self.settings["long_break_chance"]:
+            seconds = random.uniform(self.settings["long_break_duration"][0],
+                                     self.settings["long_break_duration"][1])
+            await self.print_timer(console_string="Начался долгий перерыв",
+                                   seconds=seconds)
+
+    async def check_paused(self, seconds=0.1):
+        partial(self.root.after, 0, self.update_log)()
+        if self.stop_event.is_set():
+            self.stop_script()
+        while self.pause_event.is_set():
+            await asyncio.sleep(seconds)
+
+    def stop_script(self):
+        self.timer.set("Действие не выполняется.")
+        self.script_task = None
+        self.stop_event.clear()
+
+    def pause_script(self):
+        self.pause_event.set()
+        self.pause_btn["state"] = tk.DISABLED
+        self.resume_btn["state"] = tk.NORMAL
+
+    def resume_script(self):
+        self.pause_event.clear()
+        self.resume_btn["state"] = tk.DISABLED
+        self.pause_btn["state"] = tk.NORMAL
+
+    def on_close(self):
+        self.stop_event.set()
+        self.pause_event.clear()
+        if self.driver is not None:
+            self.driver.quit()
+            partial(self.driver_loop.call_soon_threadsafe, self.driver_loop.stop)()
+            # ^^^ WORKAROUND!!! Parameter 'args' unfilled, expected '*tuple[]'
+        self.root.destroy()
+
+    #   ///////////////////////////////////
+
+    async def loop_handler(self, args=None):
+        """ Повторять сокращение или команду бесконечно (как команда patrol и repeat)
+         loop alias_name
+         """
+        if args is None:
+            self.logger.info("Введите название сокращения или команду. Пример: loop do принюхаться - копать землю")
+            return
+        if args[0] in self.driver.alias_dict.keys():
+            alias_name = args[0]
+            await self.loop_alias(alias_name)
+        comm = " - ".join(args)
+        await self.loop_comm(comm)
+
+    async def loop_alias(self, alias_name):
+        while not self.stop_event.is_set() or self.script_task is None:
+            await self.multi_comm_handler(self.driver.alias_dict[alias_name])
+            await self.trigger_long_break()
+        self.stop_event.clear()
+
+    async def loop_comm(self, comm):
+        while not self.stop_event.is_set() or self.script_task is None:
+            await self.multi_comm_handler(comm)
+            await self.trigger_long_break()
+        self.stop_event.clear()
+
+    async def multi_comm_handler(self, multi_comm: str):
+        """ Исполнить каждую команду в мультикоманде по очереди """
+
+        if not multi_comm:
+            self.logger.info("Введите команду! Пример: patrol Морозная поляна - Каменная гряда")
             return False
-        if action not in available_actions:
-            print(f"Действие {action} не может быть выполнено. Возможно, действие недоступно/"
-                  f"страница не прогрузилась до конца.\nДоступные действия: {', '.join(available_actions)}.")
-            continue
-        success = driver.click(xpath=f"//a[@data-id={action_dict[action]}][@class='dey has-tooltip']/img",
-                               offset_range=(30, 30))
-        if success:
-            # time.sleep(random.uniform(0.1, 1))
-            seconds = driver.check_time() + random.uniform(settings["short_break_duration"][0],
-                                                           settings["short_break_duration"][1])
-            last_hist_entry = driver.locate_element("//span[@id='ist']").text.split(".")[-2]
+        if multi_comm in self.alias_dict.keys():
+            await self.multi_comm_handler(self.alias_dict[multi_comm])
+            return True
 
-            do_cancel = clicker_utils.print_timer(console_string=last_hist_entry,
-                                                  seconds=seconds, turn_off_timer=driver.turn_off_timer)
-            if do_cancel:
-                cancel()
+        multi_comm_list: list = multi_comm.split("; ")
+        first_word = multi_comm.split(" ")[0]
+        if first_word == "alias":
+            multi_comm = multi_comm.replace("alias ", "")
+            return await self.create_alias(multi_comm)
+        for comm in multi_comm_list:
+            await self.comm_handler(comm)
+
+    async def comm_handler(self, comm: str) -> float | int | bool:
+        """ Разделить ключевое слово команды и аргументы """
+
+        try:
+            main_comm = comm.split(" ")[0]
+            comm = comm.replace(main_comm + " ", "")
+            args = comm.split(" - ")
+        except IndexError:
+            self.logger.info("Ошибка в парсинге аргумента. Введите help для просмотра списка команд.")
+            return False
+
+        if main_comm == "alias":
+            return await self.create_alias(comm)
+        if main_comm not in self.comm_dict.keys():
+            self.logger.info(f"Команда {main_comm} не найдена. Наберите help для просмотра списка команд.")
+            partial(self.root.after, 0, self.update_log)()
+            return False
+
+        await self.check_paused(0.1)
+        if comm == main_comm:
+            result = await self.comm_dict[main_comm]()
+        else:
+            result = await self.comm_dict[main_comm](args)
+        partial(self.root.after, 0, self.update_log)()
+        return result
+
+    async def parse_command(self, comm: str):
+        if " ? " in comm:
+            await self.parse_condition(comm)
+            return
+        await self.multi_comm_handler(comm)
+
+    async def parse_condition(self, comm):
+        # param бодрость > 30 ? go Поляна для отдыха; do Поспать : wait 1
+        condition_symbols = [" > ", " < ", " == ", " >= ", " <= ", " != "]
+        condition = comm.split(" ? ")[0]  # param бодрость > 30
+        symbol = False
+        for i in range(len(condition_symbols)):
+            if condition_symbols[i] in condition:
+                symbol = condition_symbols[i]
+                break
+        if not symbol:
+            return
+        condition_comm = condition.split(symbol)  # ['param бодрость', '30']
+        expected_value = condition_comm[1]  # 30
+        real_value = await self.comm_handler(condition_comm[0])
+        try:
+            real_value = float(real_value)
+            expected_value = float(expected_value)
+        except ValueError:
+            self.logger.info("value error")
+            return
+
+        result = eval(f"{real_value} {symbol} {expected_value}")
+        ternary_list = comm.split(" ? ")[1].split(" : ")  # ['go Поляна для отдыха; do Поспать', 'wait 1']
+        if result:
+            await self.multi_comm_handler(ternary_list[0])
+        else:
+            await self.multi_comm_handler(ternary_list[1])
+
+    def write_to_log(self, text):
+        self.logger.info(text)
+        partial(self.root.after, 0, self.update_log)()
+
+    async def patrol(self, args=None):
+        """Команда перехода, маршрут повторяется бесконечно
+        (для маршрута из 3 локаций: 1 - 2 - 3 - 2 - 1 - 2 - 3 и так далее). Использование:
+        patrol имя_локации1 - имя_локации2 - имя_локации3"""
+
+        if args is None:
+            self.logger.info("Для перехода нужны аргументы. Наберите help для вывода дополнительной информации.")
+            return False
+        if len(args) == 1:
+            while True:
+                await self.move_to_location(args[0], show_availables=False)
+        index, direction = -1, 1
+        while True:
+            if self.stop_event.is_set() or self.script_task is None:
+                return False
+            index, direction = clicker_utils.get_next_index(len(args), index, direction)
+            success = await self.move_to_location(args[index], show_availables=False)
+            if not success:
+                continue
+
+    async def go(self, args=None) -> bool:
+        """Команда перехода, маршрут проходится один раз. Использование:
+        go имя_локации1 - имя_локации2 - имя_локации3"""
+
+        if args is None:
+            self.logger.info("Для перехода нужны аргументы. Наберите help для вывода дополнительной информации.")
+            return False
+        for index in range(len(args)):
+            if self.stop_event.is_set() or self.script_task is None:
+                return False
+            success = await self.move_to_location(args[index], show_availables=True)
+            if not success:
+                continue
+        return True
+
+    async def do(self, args=None, show_availables=True) -> bool:
+        """Команда для исполнения последовательности действий 1 раз. Использование:
+        do действие1 - действие2 - действие3"""
+
+        if await self.driver.is_held():
+            self.driver.quit()
+            return False
+        if args is None:
+            self.logger.info("Для действия нужны аргументы. Наберите help для вывода дополнительной информации.")
+            return False
+        args = [action.strip().lower() for action in args]
+        for action in args:
+            if self.stop_event.is_set() or self.script_task is None:
+                return False
+            available_actions = await self.driver.get_available_actions(self.action_dict)
+            if action not in available_actions:
+                self.logger.info(f'Действие "{action.title()}" не может быть выполнено. Возможно, действие недоступно/'
+                                 f'страница не прогрузилась до конца.'
+                                 f'\nДоступные действия: {', '.join(available_actions)}.')
+                continue
+            action_active_sec = await self.driver.check_time()
+            if action_active_sec != 1:
+                await self.print_timer(seconds=action_active_sec + self.settings["short_break_duration"][1])
+            await self.driver.click(
+                f"//a[@data-id={self.action_dict[action]}][@class='dey has-tooltip']/img",
+                offset_range=(30, 30))
+            seconds = await self.driver.check_time() + random.uniform(
+                self.settings["short_break_duration"][0],
+                self.settings["short_break_duration"][1])
+            await self.print_timer(seconds=seconds)
             if action == "принюхаться":
-                print(driver.check_skill("smell",
-                                         clicker_utils.get_key_by_value(skills_dict, "smell")))
-                driver.click(xpath="//tr[@id='tr_tos']/td/table/tbody/tr/td[1]/button")
+                self.logger.info(await self.driver.check_skill
+                ("smell", clicker_utils.get_key_by_value(self.skills_dict, "smell")))
+                await self.driver.click(xpath="//tr[@id='tr_tos']/td/table/tbody/tr/td[1]/button")
             elif action == "копать землю":
-                print(driver.check_skill("dig",
-                                         clicker_utils.get_key_by_value(skills_dict, "dig")))
+                self.logger.info(await self.driver.check_skill
+                ("dig", clicker_utils.get_key_by_value(self.skills_dict, "dig")))
             elif action == "поплавать":
-                print(driver.check_skill("swim",
-                                         clicker_utils.get_key_by_value(skills_dict, "swim")))
+                self.logger.info(await self.driver.check_skill
+                ("swim", clicker_utils.get_key_by_value(self.skills_dict, "swim")))
 
             if show_availables:
-                print(f"Доступные действия: {', '.join(driver.get_available_actions(action_dict))}")
-        else:
-            continue
-    return True
-
-
-def patrol(args=None):
-    """Команда перехода, маршрут повторяется бесконечно
-    (для маршрута из 3 локаций: 1 - 2 - 3 - 2 - 1 - 2 - 3 и так далее). Использование:
-    patrol имя_локации1 - имя_локации2 - имя_локации3"""
-
-    if args is None:
-        print("Для перехода нужны аргументы. Наберите help для вывода дополнительной информации.")
-        return False
-    if len(args) == 1:
-        while True:
-            driver.move_to_location(args[0], show_availables=False)
-    index, direction = -1, 1
-    while True:
-        index, direction = clicker_utils.get_next_index(len(args), index, direction)
-        success = driver.move_to_location(args[index], show_availables=False)
-        if not success:
-            continue
-
-
-def go(args=None) -> bool:
-    """Команда перехода, маршрут проходится один раз. Использование:
-    go имя_локации1 - имя_локации2 - имя_локации3"""
-
-    if args is None:
-        print("Для перехода нужны аргументы. Наберите help для вывода дополнительной информации.")
-        return False
-    for index in range(len(args)):
-        success = driver.move_to_location(args[index], show_availables=True)
-        if not success:
-            continue
-    return True
-
-
-def start_rabbit_game() -> bool:
-    """ Начать игру в числа с Лапом, после 5 игр вернуться в cw3. Использование:
-     rabbit_game"""
-
-    driver.get("https://catwar.net/chat")
-    time.sleep(random.uniform(1, 3))
-    driver.click(xpath="//a[@data-bind='openPrivateWith_form']")
-    driver.type_in_chat("Системолап", entry_xpath="//input[@id='openPrivateWith']")
-    driver.click(xpath="//*[@id='openPrivateWith_form']/p/input[2]")  # OK button
-
-    games_played = 0
-    while games_played != 5:
-        driver.rabbit_game()
-        games_played += 1
-    driver.get("https://catwar.net/cw3/")
-    return True
-
-
-def info() -> bool:
-    """Команда для вывода информации о состоянии игрока из Игровой. Использование:
-    info"""
-
-    if driver.current_url != "https://catwar.net/cw3/":
-        return False
-    current_location = driver.get_current_location()
-    print(f"Текущая локация: {current_location}\n"
-          f"Доступные локации: {', '.join(driver.get_available_locations())}\n"
-          f"Доступные действия: {', '.join(driver.get_available_actions(action_dict))}")
-    driver.print_cats()
-    print(f"\t Здоровье:\t{driver.get_parameter('health')}%\n"
-          f"\t Бодрость:\t{driver.get_parameter('dream')}%\n"
-          f"\t Чистота: \t{driver.get_parameter('clean')}%\n"
-          f"\t Голод:\t\t{driver.get_parameter('hunger')}%\n"
-          f"\t Жажда:\t\t{driver.get_parameter('thirst')}%\n"
-          f"\t Нужда:\t\t{driver.get_parameter('need')}%")
-
-    print("Последние 5 записей в истории (введите hist, чтобы посмотреть полную историю):")
-    hist_list = driver.get_hist_list()
-    print(f"\t{'.\n\t'.join(hist_list[-6:])}.")
-    return True
-
-
-def char() -> bool:
-    """ Команда для вывода информации о персонаже с домашней страницы/Игровой. Использование:
-    char """
-
-    driver.get("https://catwar.net/")
-    rank = driver.locate_element('''//div[@id='pr']/i''', do_wait=False)
-
-    print(f"Имя: {driver.locate_element('''//div[@id='pr']/big''').text}")
-    if rank:
-        print(f"Должность: {rank.text}\n")
-    print(f"Луны: {driver.locate_element('''//div[@id='pr']/table/tbody/tr[2]/td[2]/b''').text}\n"
-          f"ID: {driver.locate_element('''//b[@id='id_val']''').text}\n"
-          f"Активность: {driver.locate_element('''//div[@id='act_name']/b''').text}")
-    driver.back()
-
-    print(driver.check_skill("smell",
-                             clicker_utils.get_key_by_value(skills_dict, "smell")))
-    print(driver.check_skill("dig",
-                             clicker_utils.get_key_by_value(skills_dict, "dig")))
-    print(driver.check_skill("swim",
-                             clicker_utils.get_key_by_value(skills_dict, "swim")))
-    print(driver.check_skill("might",
-                             clicker_utils.get_key_by_value(skills_dict, "might")))
-    print(driver.check_skill("tree",
-                             clicker_utils.get_key_by_value(skills_dict, "tree")))
-    print(driver.check_skill("observ",
-                             clicker_utils.get_key_by_value(skills_dict, "observ")))
-    return True
-
-
-def hist():
-    """Команда для вывода истории действий из Игровой, использование:
-    hist"""
-
-    print("История:")
-    hist_list = driver.get_hist_list()
-    for item in hist_list:
-        print(item)
-
-
-def clear_hist():
-    """Команда 'очистить историю', использование:
-    clear_hist"""
-
-    driver.click(xpath="//a[@id='history_clean']")
-    print("История очищена.")
-
-
-def cancel() -> bool:
-    """Отменить действие. Использование:
-    cancel"""
-
-    success = driver.click(xpath="//a[@id='cancel']")
-    if success:
-        print("Действие отменено!")
-        return True
-    print("Действие не выполняется!")
-    return False
-
-
-def create_alias(comm) -> bool:
-    """Команда для создания сокращений для часто используемых команд.
-    Использование:
-    alias name comm
-    Пример:
-    alias кач_актив patrol Морозная поляна - Поляна для отдыха
-    В дальнейшем команда patrol Морозная поляна - Поляна для отдыха будет исполняться при вводе кач_актив"""
-
-    try:
-        main_alias_comm = comm.split(" ")[1]
-    except IndexError:
-        print("Ошибка в парсинге сокращения. Пример использования команды:"
-              "\nalias кач_актив patrol Морозная поляна - Поляна для отдыха")
-        return False
-    if main_alias_comm not in comm_dict.keys():
-        print(f"Команда {main_alias_comm} не найдена, сокращение не было создано.")
-        return False
-    name = comm.split(" ")[0]
-    comm_to_alias = comm.replace(name + " ", "")
-    config["aliases"][name] = comm_to_alias
-    print(f"Создано сокращение команды {comm_to_alias} под именем {name}.")
-    clicker_utils.rewrite_config(config)
-    return True
-
-
-def refresh():
-    """Перезагрузить страницу"""
-
-    driver.refresh()
-    print("Страница обновлена!")
-
-
-def change_settings(args=None) -> bool:
-    """Команда для изменения настроек. Использование:
-    settings key - value
-    (Пример: settings is_headless - True)"""
-
-    if args is None or len(args) != 2:
-        print(config["settings"])
-        return False
-    key, value = args
-    try:
-        if key == "driver_path" or key == "my_id":
-            config["settings"][key] = value
-        else:
-            config["settings"][key] = eval(value)
-    except ValueError:
-        print("Ошибка в парсинге аргумента.")
-        return False
-    clicker_utils.rewrite_config(config)
-    return True
-
-
-def wait_for(seconds=None) -> bool:
-    """ Ничего не делать рандомное количество времени от seconds_start до seconds_end секунд либо ровно seconds секунд
-     seconds: list = [seconds_start, seconds_end]"""
-
-    if seconds is None or len(seconds) > 2:
-        print("Введите количество секунд! wait seconds_from - seconds_to ИЛИ wait seconds")
-        return False
-    if len(seconds) == 1:
-        clicker_utils.print_timer(console_string="Начато ожидание",
-                                  seconds=float(seconds[0]),
-                                  turn_off_timer=driver.turn_off_timer)
-        return True
-    try:
-        seconds[0], seconds[1] = int(seconds[0]), int(seconds[1])
-    except (IndexError, ValueError):
-        print("wait seconds_from - seconds_to ИЛИ wait seconds")
-        return False
-    seconds: float = random.uniform(int(seconds[0]), int(seconds[1]))
-    clicker_utils.print_timer(console_string="Начато ожидание", seconds=seconds, turn_off_timer=driver.turn_off_timer)
-    return True
-
-
-def text_to_chat(message=None) -> bool:
-    """Написать сообщение в чат Игровой"""
-
-    if message is None or len(message) != 1:
-        print("say message")
-        return False
-    message = message[0]
-    driver.type_in_chat(text=message, entry_xpath="//input[@id='text']")
-    driver.click(xpath="//*[@id='msg_send']")
-    return True
-
-
-def print_rabbits_balance():
-    """ Вывести баланс кролей игрока """
-
-    driver.get("https://catwar.net/rabbit")
-    rabbit_balance = driver.locate_element(xpath="//img[@src='img/rabbit.png']/preceding-sibling::b").text
-    wait_for([0.5, 1.5])
-    driver.back()
-
-    print("Кролей на счету:", rabbit_balance)
-
-
-def print_inv():
-    inv_ids = driver.get_inv_items()
-    print("Предметы во рту:")
-    for i in inv_ids:
-        print(f"https://catwar.net/cw3/things/{i}.png")
-
-
-def end_session():
-    """ Завершить текущую сессию и закрыть вебдрайвер. Использование:
-     q """
-
-    print("\nВебдрайвер закрывается...")
-    driver.quit()
-
-
-def print_readme():
-    """ Вывести содержимое файла README.md или ссылку на него. Использование:
-     help """
-
-    if not os.path.exists("README.md"):
-        print("Файла справки README.md не существует или он удалён.\n"
-              "Справка на GitHub: https://github.com/YaraRishar/chronoclicker?tab=readme-ov-file#chronoclicker")
-        return
-    with open("README.md", "r", encoding="utf-8") as readme:
-        for line in readme:
-            print(line, end="")
-
-
-def print_cage_info(args=()):
-    """ Вывести всю информацию о клетке в Игровой """
-
-    if not args or len(args) != 2:
-        print("c row - column")
-        return
-    cage = cage_utils.Cage(driver, row=args[0], column=args[1])
-    cage.pretty_print()
-
-
-def parse_condition(comm):
-    # param бодрость > 30 ? go Поляна для отдыха; do Поспать : wait 1
-    condition_symbols = [" > ", " < ", " == ", " >= ", " <= ", " != "]
-    condition = comm.split(" ? ")[0]  # param бодрость > 30
-    symbol = False
-    for i in range(len(condition_symbols)):
-        if condition_symbols[i] in condition:
-            symbol = condition_symbols[i]
-            break
-    if not symbol:
-        return
-    condition_comm = condition.split(symbol)  # ['param бодрость', '30']
-    expected_value = condition_comm[1]  # 30
-    real_value = comm_handler(condition_comm[0])
-    try:
-        real_value = float(real_value)
-        expected_value = float(expected_value)
-    except ValueError:
-        print("value error")
-        return
-
-    result = eval(f"{real_value} {symbol} {expected_value}")
-    ternary_list = comm.split(" ? ")[1].split(" : ")  # ['go Поляна для отдыха; do Поспать', 'wait 1']
-    if result:
-        multi_comm_handler(ternary_list[0])
-    else:
-        multi_comm_handler(ternary_list[1])
-
-
-def multi_comm_handler(multi_comm: str):
-    """ Исполнить каждую команду в мультикоманде по очереди """
-
-    if not multi_comm:
-        print("Введите команду! Пример: patrol Морозная поляна - Каменная гряда")
-        return False
-    if multi_comm in alias_dict.keys():
-        multi_comm_handler(alias_dict[multi_comm])
+                self.logger.info(f"Доступные действия: {', '.join(
+                    await self.driver.get_available_actions(self.action_dict))}")
         return True
 
-    multi_comm_list: list = multi_comm.split("; ")
-    first_word = multi_comm.split(" ")[0]
-    if first_word == "alias":
-        multi_comm = multi_comm.replace("alias ", "")
-        return create_alias(multi_comm)
-    for comm in multi_comm_list:
-        comm_handler(comm)
+    async def bury_handler(self, args=None):
+        """ Закопать предмет с айди картинки id на глубину level:
+        bury id - level
+        Закопать все предметы во рту на глубину level:
+        bury inv - level """
 
+        if args is None or args == [""] or len(args) != 2:
+            self.logger.info("Чтобы закопать предмет, введите айди его картинки и глубину закапывания.")
+            return
+        try:
+            level = 1 if len(args) == 1 else int(args[1])
+            level = 9 if level > 9 else level
+            item_img_id = args[0]
+            if item_img_id != "inv":
+                item_img_id = int(args[0])
+        except ValueError:
+            self.logger.info("bury id_img - level или bury inv - level")
+            return
+        inv_items = await self.driver.get_inv_items()
+        if not inv_items:
+            self.logger.info("Во рту нет предметов!")
+            return
+        if item_img_id == "inv":
+            for item in inv_items:
+                await self.bury_item(item, level)
+                level = 1
+            return
+        if item_img_id not in inv_items:
+            self.logger.info(f"Предмета с айди {item_img_id} нет в инвентаре! Ссылка на изображение: "
+                             f"https://catwar.net/cw3/things/{item_img_id}.png")
+            return
+        await self.bury_item(item_img_id, level)
 
-def comm_handler(comm: str) -> float | int | bool:
-    """ Разделить ключевое слово команды и аргументы """
+    async def cancel(self) -> bool:
+        """Отменить действие. Использование:
+        cancel"""
 
-    try:
-        main_comm = comm.split(" ")[0]
-        comm = comm.replace(main_comm + " ", "")
-        args = comm.split(" - ")
-    except IndexError:
-        print("Ошибка в парсинге аргумента. Введите help для просмотра списка команд.")
+        success = await self.driver.click(xpath="//a[@id='cancel']")
+        if success:
+            self.stop_event.set()
+            self.logger.info("Действие отменено!")
+            self.timer.set("Действие не выполняется.")
+            return True
+        self.logger.info("Действие не выполняется.")
         return False
 
-    if main_comm == "alias":
-        return create_alias(comm)
-    if main_comm not in comm_dict.keys():
-        print(f"Команда {main_comm} не найдена. Наберите help для просмотра списка команд.")
-        return False
+    async def clear_hist(self):
+        """Команда 'очистить историю', использование:
+        clear_hist"""
 
-    if comm == main_comm:
-        result = comm_dict[main_comm]()
-        return result
-    result = comm_dict[main_comm](args)
-    return result
+        await self.driver.click(xpath="//a[@id='history_clean']")
+        self.logger.info("История очищена.")
 
+    async def hist(self):
+        """Команда для вывода истории действий из Игровой, использование:
+        hist"""
 
-def parse_command(comm: str):
-    if " ? " in comm:
-        parse_condition(comm)
-        return
-    multi_comm_handler(comm)
+        self.logger.info("История:")
+        hist_list = await self.driver.get_hist_list()
+        for item in hist_list:
+            self.logger.info(f"{item}.")
 
+    async def char(self) -> bool:
+        """ Команда для вывода информации о персонаже с домашней страницы/Игровой. Использование:
+        char """
 
-def bury_handler(args=None):
-    """ Закопать предмет с айди картинки id на глубину level:
-    bury id - level
-    Закопать все предметы во рту на глубину level:
-    bury inv - level """
+        self.driver.get("https://catwar.net/")
+        rank = await self.driver.locate_element('''//div[@id='pr']/i''', do_wait=False)
 
-    if args is None or args == [""] or len(args) != 2:
-        print("Чтобы закопать предмет, введите айди его картинки и глубину закапывания.")
-        return
-    try:
-        level = 1 if len(args) == 1 else int(args[1])
-        level = 9 if level > 9 else level
-        item_img_id = args[0]
-        if item_img_id != "inv":
-            item_img_id = int(args[0])
-    except ValueError:
-        print("bury id_img - level или bury inv - level")
-        return
-    inv_items = driver.get_inv_items()
-    if not inv_items:
-        print("Во рту нет предметов!")
-        return
-    if item_img_id == "inv":
-        for item in inv_items:
-            driver.bury_item(item, level)
-            level = 1
-        return
-    if item_img_id not in inv_items:
-        print(f"Предмета с айди {item_img_id} нет в инвентаре! Ссылка на изображение: "
-              f"https://catwar.net/cw3/things/{item_img_id}.png")
-        return
-    driver.bury_item(item_img_id, level)
+        self.logger.info(f"Имя: {get_text(await self.driver.locate_element('''//div[@id='pr']/big'''))}")
+        if rank:
+            self.logger.info(f"Должность: {get_text(rank)}\n")
+        self.logger.info(
+            f"Луны: {get_text(await self.driver.locate_element('''//div[@id='pr']/table/tbody/tr[2]/td[2]/b'''))}"
+            f"\nID: {get_text(await self.driver.locate_element('''//b[@id='id_val']'''))}\n"
+            f"Активность: {get_text(await self.driver.locate_element('''//div[@id='act_name']/b'''))}")
+        self.driver.back()
+        self.logger.info(await self.driver.check_skill("smell",
+                                                       clicker_utils.get_key_by_value(
+                                                           self.skills_dict, "smell")))
+        self.logger.info(await self.driver.check_skill("dig",
+                                                       clicker_utils.get_key_by_value(
+                                                           self.skills_dict, "dig")))
+        self.logger.info(await self.driver.check_skill("swim",
+                                                       clicker_utils.get_key_by_value(
+                                                           self.skills_dict, "swim")))
+        self.logger.info(await self.driver.check_skill("might",
+                                                       clicker_utils.get_key_by_value(
+                                                           self.skills_dict, "might")))
+        self.logger.info(await self.driver.check_skill("tree",
+                                                       clicker_utils.get_key_by_value(
+                                                           self.skills_dict, "tree")))
+        self.logger.info(await self.driver.check_skill("observ",
+                                                       clicker_utils.get_key_by_value(
+                                                           self.skills_dict, "observ")))
+        return True
 
+    async def info(self) -> bool:
+        """Команда для вывода информации о состоянии игрока из Игровой. Использование:
+        info"""
 
-def jump_to_cage(args=None, verbose=True) -> int:
-    if not args or len(args) != 2:
-        print("jump row - column")
-        return -1
-    row, column = args
-    cage = cage_utils.Cage(driver, row, column)
-    cage.jump()
-    if verbose:
-        print(f"Прыжок на {row} ряд, {column} клетку.")
-    return 0
+        if self.driver.current_url != "https://catwar.net/cw3/":
+            return False
+        current_location = await self.driver.get_current_location()
+        self.logger.info(f"Текущая локация: {current_location}\n"
+                         f"Доступные локации: {', '.join(await self.driver.get_available_locations())}\n"
+                         f"Доступные действия: {', '.join(await self.driver.get_available_actions(self.action_dict))}")
+        await self.driver.print_cats()
+        self.logger.info(f"\tЗдоровье:\t\t{await self.driver.get_parameter('health')}%\n"
+                         f"\t Бодрость:\t\t{await self.driver.get_parameter('dream')}%\n"
+                         f"\t Чистота:\t\t{await self.driver.get_parameter('clean')}%\n"
+                         f"\t Голод:\t\t{await self.driver.get_parameter('hunger')}%\n"
+                         f"\t Жажда:\t\t{await self.driver.get_parameter('thirst')}%\n"
+                         f"\t Нужда:\t\t{await self.driver.get_parameter('need')}%")
 
+        self.logger.info("Последние 5 записей в истории (введите hist, чтобы посмотреть полную историю):")
+        hist_list = await self.driver.get_hist_list()
+        self.logger.info(f"\t{'.\n\t'.join(hist_list[-6:])}.")
+        return True
 
-def loop_handler(args=None):
-    """ Повторять сокращение или команду бесконечно (как команда patrol и repeat)
-     loop alias_name
-     """
-    if args is None:
-        print("Введите название сокращения или команду. Пример: loop do принюхаться - копать землю")
-        return
-    if args[0] in alias_dict.keys():
-        alias_name = args[0]
-        loop_alias(alias_name)
-    comm = " - ".join(args)
-    loop_comm(comm)
+    async def text_to_chat(self, message=None) -> bool:
+        """Написать сообщение в чат Игровой"""
 
+        if message is None or len(message) != 1:
+            self.logger.info("say message")
+            return False
+        message = message[0]
+        await self.driver.type_in_chat(text=message, entry_xpath="//input[@id='text']")
+        await self.driver.click("//*[@id='msg_send']")
+        return True
 
-def loop_alias(alias_name):
-    while True:
-        multi_comm_handler(alias_dict[alias_name])
-        driver.trigger_long_break(long_break_chance=settings["long_break_chance"],
-                                  long_break_duration=settings["long_break_duration"])
+    async def wait(self, seconds=None) -> bool:
+        """ Ничего не делать рандомное количество времени от seconds_start
+        до seconds_end секунд либо ровно seconds секунд
+         seconds: list = [seconds_start, seconds_end]"""
 
+        if seconds is None or len(seconds) > 2:
+            self.logger.info("Введите количество секунд! wait seconds_from - seconds_to ИЛИ wait seconds")
+            return False
+        if len(seconds) == 1:
+            await self.print_timer(console_string="Начато ожидание",
+                                   seconds=float(seconds[0]))
+            return True
+        try:
+            seconds[0], seconds[1] = int(seconds[0]), int(seconds[1])
+        except (IndexError, ValueError):
+            self.logger.info("wait seconds_from - seconds_to ИЛИ wait seconds")
+            return False
+        seconds: float = random.uniform(int(seconds[0]), int(seconds[1]))
+        await self.print_timer(console_string="Начато ожидание", seconds=seconds)
+        return True
 
-def loop_comm(comm):
-    while True:
-        multi_comm_handler(comm)
-        driver.trigger_long_break(long_break_chance=settings["long_break_chance"],
-                                  long_break_duration=settings["long_break_duration"])
+    async def print_inv(self):
+        inv_ids = await self.driver.get_inv_items()
+        self.logger.info("Предметы во рту:")
+        for i in inv_ids:
+            self.logger.info(f"https://catwar.net/cw3/things/{i}.png")
 
+    async def find_items(self, items_to_seek=None):
+        """ Искать перечисленные предметы по разным локациям, поднимать их, если найдены """
 
-def find_items(items_to_seek=None):
-    """ Искать перечисленные предметы по разным локациям, поднимать их, если найдены """
-
-    if not items_to_seek:
-        print("find_item item_id - item_id")
-        return
-    items_to_seek = [int(item) for item in items_to_seek]
-    cages_list = driver.get_cages_list()
-    for cage in cages_list:
-        items_on_cage = cage.get_items()
-        if not items_on_cage:
-            continue
-        for item in items_on_cage:
-            if item in items_to_seek:
-                print(f"found item with id {item}")
-                cage.pick_up_item()
-    available_locations = driver.get_available_locations()
-    random_location = random.sample(available_locations, 1)
-    go(random_location)
-    find_items(items_to_seek)
-
-
-def find_cats(args=None):
-    """ Найти кота по его имени или ID на локациях, рандомно переходя по ним """
-
-    if args is None:
-        print("find_cat имя_кота")
-        return False
-
-    names_to_find: list = args
-    while names_to_find:
-        cat_name, location, row, column = driver.find_cat_on_loc(names_to_find)
-        if cat_name:
-            print(f"Кот {cat_name} найден в локации {location} на клетке {row}x{column}!")
-            names_to_find.remove(cat_name)
-            if not names_to_find:
-                return True
-            continue
-        available_locations = driver.get_available_locations()
+        if not items_to_seek:
+            self.logger.info("find_item item_id - item_id")
+            return
+        items_to_seek = [int(item) for item in items_to_seek]
+        cages_list = await self.driver.get_cages_list()
+        for cage in cages_list:
+            items_on_cage = cage.get_items()
+            if not items_on_cage:
+                continue
+            for item in items_on_cage:
+                if item in items_to_seek:
+                    self.logger.info(f"found item with id {item}")
+                    cage.pick_up_item()
+        available_locations = await self.driver.get_available_locations()
         random_location = random.sample(available_locations, 1)
-        go(random_location)
+        await self.go(random_location)
+        await self.find_items(items_to_seek)
 
+    async def find_cats(self, args=None):
+        """ Найти кота по его имени или ID на локациях, рандомно переходя по ним """
 
-def pathfind_handler(end: tuple, forbidden_cages_given=()):
-    """ Найти путь по клеткам от вашего местоположения до end. Использование:
-     pathfind row - column"""
+        if args is None:
+            self.logger.info("find_cat имя_кота")
+            return False
 
-    end = int(end[0]), int(end[1])
-    end_cage = cage_utils.Cage(driver, end[0], end[1])
-    if end_cage.is_move() or end_cage.has_cat():
-        print(f"Клетка {end} занята котом или переходом!")
-        return
-    my_coords = find_my_coords(verbose=False)
-    cages = driver.get_cages_list()
-    forbidden_cages = [_ for _ in forbidden_cages_given]
+        names_to_find: list = args
+        while names_to_find:
+            cat_name, location, row, column = await self.driver.find_cat_on_loc(names_to_find)
+            if cat_name:
+                self.logger.info(f"Кот {cat_name} найден в локации {location} на клетке {row}x{column}!")
+                names_to_find.remove(cat_name)
+                if not names_to_find:
+                    return True
+                continue
+            available_locations = await self.driver.get_available_locations()
+            random_location = random.sample(available_locations, 1)
+            await self.go(random_location)
 
-    for cage in cages:
-        if cage.is_move() or cage.has_cat():
-            forbidden_cages.append((cage.row, cage.column))
+    async def pathfind_handler(self, end: tuple, forbidden_cages_given=()):
+        """ Найти путь по клеткам от вашего местоположения до end. Использование:
+         pathfind row - column"""
 
-    path = clicker_utils.pathfind(start=my_coords, end=end, forbidden_cages=forbidden_cages)
-    for cage in path:
-        jump_to_cage(cage, verbose=False)
-    driver.print_cats()
+        end = int(end[0]), int(end[1])
+        end_cage = cage_utils.Cage(self.driver, end[0], end[1])
+        if end_cage.is_move() or end_cage.has_cat():
+            self.logger.info(f"Клетка {end} занята котом или переходом!")
+            return
+        my_coords = await self.find_my_coords(verbose=False)
+        cages = await self.driver.get_cages_list()
+        forbidden_cages = [_ for _ in forbidden_cages_given]
 
+        for cage in cages:
+            if cage.is_move() or cage.has_cat():
+                forbidden_cages.append((cage.row, cage.column))
 
-def check_parameter(args=None) -> float | int:
-    """ Команда для проверки параметра parameter_name. Возвращает float или int - значение параметра в процентах.
-     param бодрость"""
+        path = clicker_utils.pathfind(start=my_coords, end=end, forbidden_cages=forbidden_cages)
+        for cage in path:
+            await self.jump_to_cage(cage, verbose=False)
+        await self.driver.print_cats()
 
-    if args is None or len(args) != 1:
-        print("param parameter_name")
-        return -1
-    param_name: str = args[0].strip().lower()
-    if param_name not in parameters_dict:
-        print("param_name not in parameters_dict")
-        return -1
-    param_name_server = parameters_dict[param_name]
-    param_value = driver.get_parameter(param_name=param_name_server)
-    print(f"{param_name.capitalize()} - {param_value}")
-    return param_value
+    async def jump_to_cage(self, args=None, verbose=True) -> int:
+        if not args or len(args) != 2:
+            self.logger.info("jump row - column")
+            return -1
+        row, column = args
+        cage = cage_utils.Cage(self.driver, row, column)
+        await cage.jump()
+        if verbose:
+            self.logger.info(f"Прыжок на {row} ряд, {column} клетку.")
+        return 0
 
+    async def check_parameter(self, args=None) -> float | int:
+        """ Команда для проверки параметра parameter_name.
+        Возвращает float или int - значение параметра в процентах.
+         param бодрость"""
 
-def check_skill(args=None) -> int:
-    """ Команда для проверки навыка skill_name. Возвращает fint - значение дроби навыка ('числитель').
-     skill ун """
+        if args is None or len(args) != 1:
+            self.logger.info("param parameter_name")
+            return -1
+        param_name: str = args[0].strip().lower()
+        if param_name not in self.parameters_dict:
+            self.logger.info("param_name not in parameters_dict")
+            return -1
+        param_name_server = self.parameters_dict[param_name]
+        param_value = await self.driver.get_parameter(param_name=param_name_server)
+        self.logger.info(f"{param_name.capitalize()} - {param_value}")
+        return param_value
 
-    if args is None or len(args) != 1:
-        print("skill аббревиатура_навыка")
-        return -1
-    skill_name: str = args[0].strip().lower()
-    if skill_name not in skills_dict:
-        print("Невалидное имя навыка! Примеры: нюх, копание, боевые умения, "
-              "плавательные умения, зоркость, лазание")
-        return -1
-    skill_name_server = skills_dict[skill_name]
-    skill_value = driver.check_skill(skill_name_server, skill_name)
-    print(skill_value)
-    skill_fraction = re.search(r"\((\d*)/", skill_value)
-    if not skill_fraction:
-        return -1
-    return int(skill_fraction[1])
+    async def check_skill(self, args=None) -> int:
+        """ Команда для проверки навыка skill_name. Возвращает fint - значение дроби навыка ('числитель').
+         skill ун """
 
+        if args is None or len(args) != 1:
+            self.logger.info("skill аббревиатура_навыка")
+            return -1
+        skill_name: str = args[0].strip().lower()
+        if skill_name not in self.skills_dict:
+            self.logger.info("Невалидное имя навыка! Примеры: нюх, копание, боевые умения, "
+                             "плавательные умения, зоркость, лазание")
+            return -1
+        skill_name_server = self.skills_dict[skill_name]
+        skill_value = await self.driver.check_skill(skill_name_server, skill_name)
+        self.logger.info(skill_value)
+        skill_fraction = re.search(r"\((\d*)/", skill_value)
+        if not skill_fraction:
+            return -1
+        return int(skill_fraction[1])
 
-def count_cw3_messages() -> int:
-    chatbox = driver.locate_element(xpath="//div[@id='chat_msg']")
-    msg_list = chatbox.find_elements(By.XPATH, value="//span/table/tbody/tr/td/span")
-    return len(msg_list)
+    async def print_rabbits_balance(self):
+        """ Вывести баланс кролей игрока """
 
+        self.driver.get("https://catwar.net/rabbit")
+        rabbit_balance = get_text(await self.driver.locate_element(
+            "//img[@src='img/rabbit.png']/preceding-sibling::b"))
+        await self.wait_for(0.5, 1.5)
+        self.driver.back()
+        self.logger.info(f"Кролей на счету: {rabbit_balance}")
 
-def get_last_cw3_message_volume() -> int:
-    chatbox = driver.locate_element(xpath="//div[@id='chat_msg']")
-    msg_element = chatbox.find_element(By.XPATH, value="//span/table/tbody/tr/td/span")
-    if not msg_element:
-        print("no cw3 messages found")
-        return -1
-    volume_str = msg_element.get_attribute("class")
-    volume = int("".join([i for i in volume_str if i.isdigit()]))
-    return volume
+    async def print_readme(self):
+        """ Вывести содержимое файла README.md или ссылку на него. Использование:
+         help """
 
+        if not os.path.exists("README.md"):
+            self.logger.info("Файла справки README.md не существует или он удалён.\n"
+                             "Справка на GitHub: "
+                             "https://github.com/YaraRishar/chronoclicker?tab=readme-ov-file#chronoclicker")
+            self.driver.get("https://github.com/YaraRishar/chronoclicker?tab=readme-ov-file#chronoclicker")
+            return
+        with open("README.md", "r", encoding="utf-8") as readme:
+            for line in readme:
+                self.logger.info(line)
 
-def check_for_warning() -> bool:
-    """ *CONSTRUCTION NOISES* """
+    async def print_cage_info(self, args=()):
+        """ Вывести всю информацию о клетке в Игровой """
 
-    error_element = driver.locate_element(xpath="//p[id='error']")
-    error_style = error_element.get_attribute("style")
-    if "block" in error_style:
+        if not args or len(args) != 2:
+            self.logger.info("c row - column")
+            return
+        cage = cage_utils.Cage(self.driver, row=args[0], column=args[1])
+        await cage.pretty_print()
+
+    async def start_rabbit_game(self) -> bool:
+        """ Начать игру в числа с Лапом, после 5 игр вернуться в cw3. Использование:
+         rabbit_game"""
+
+        self.driver.get("https://catwar.net/chat")
+        await self.wait_for(1, 3)
+        await self.driver.click("//a[@data-bind='openPrivateWith_form']")
+        await self.driver.type_in_chat("Системолап", entry_xpath="//input[@id='openPrivateWith']")
+        await self.driver.click("//*[@id='openPrivateWith_form']/p/input[2]")
+
+        games_played = 0
+        while games_played != 5:
+            await self.driver.rabbit_game()
+            games_played += 1
+        self.driver.get("https://catwar.net/cw3/")
         return True
-    return False
 
+    async def change_settings(self, args=None) -> bool:
+        """Команда для изменения настроек. Использование:
+        settings key - value
+        (Пример: settings is_headless - True)"""
 
-def find_my_coords(verbose=True) -> (int, int):
-    my_info = driver.find_cat_on_loc([settings["my_id"]])
-    my_coords = my_info[2:]
-    if verbose:
-        current_location = driver.get_current_location()
-        print(f"Вы находитесь на локации «{current_location}» на клетке {my_coords[0]}x{my_coords[1]}.")
-    return my_coords
+        if args is None or len(args) != 2:
+            message = ""
+            for key, value in self.settings.items():
+                message += f"\t{key} - {value}\n"
+            self.logger.info(message)
+            return False
+        key, value = args
+        try:
+            if key == "driver_path" or key == "my_id":
+                self.settings[key] = value
+            else:
+                self.settings[key] = eval(value)
+        except ValueError:
+            self.logger.info("Ошибка в парсинге аргумента.")
+            return False
+        clicker_utils.rewrite_config(self.config)
+        self.logger.info("Настройки обновлены!")
+        return True
 
+    async def refresh(self):
+        """Перезагрузить страницу"""
 
-def check_cage(cage_to_check: tuple, max_checks=10) -> int:
-    """ *CONSTRUCTION NOISES* """
+        self.driver.refresh()
+        self.logger.info("Страница обновлена!")
 
-    checks = 0
-    safe_cage = find_my_coords(verbose=False)
-    current_msg_count = count_cw3_messages()
-    danger_level = -2
-    while checks < max_checks:
-        jump_to_cage(cage_to_check, verbose=False)
-        last_msg_count = count_cw3_messages()
-        if last_msg_count > current_msg_count:
-            danger_level = get_last_cw3_message_volume()
-            break
-        wait_for([1, 2])
-        jump_to_cage(safe_cage, verbose=False)
-    print("danger_level", danger_level)
-    return danger_level
+    async def print_aliases(self):
+        message = ""
+        for alias_name, comm in self.alias_dict.items():
+            message += f"\t{alias_name}: {comm}\n"
+        self.logger.info(message)
 
+    async def create_alias(self, comm) -> bool:
+        """Команда для создания сокращений для часто используемых команд.
+        Использование:
+        alias name comm
+        Пример:
+        alias кач_актив patrol Морозная поляна - Поляна для отдыха
+        В дальнейшем команда patrol Морозная поляна - Поляна для отдыха будет исполняться при вводе кач_актив"""
 
-def map_field():
-    pass
+        try:
+            main_alias_comm = comm.split(" ")[1]
+        except IndexError:
+            self.logger.info("Ошибка в парсинге сокращения. Пример использования команды:"
+                             "\nalias кач_актив patrol Морозная поляна - Поляна для отдыха")
+            return False
+        if main_alias_comm not in self.comm_dict.keys():
+            self.logger.info(f"Команда {main_alias_comm} не найдена, сокращение не было создано.")
+            return False
+        name = comm.split(" ")[0]
+        comm_to_alias = comm.replace(name + " ", "")
+        self.config["aliases"][name] = comm_to_alias
+        self.logger.info(f"Создано сокращение команды {comm_to_alias} под именем {name}.")
+        clicker_utils.rewrite_config(self.config)
+        return True
 
+    async def move_to_location(self,
+                               location_name: str, show_availables=False) -> bool:
+        """ Общая функция для перехода на локацию """
 
-comm_dict = {"patrol": patrol,
-             # patrol  location1 - locationN
-             "go": go,
-             # go  location1 - locationN
-             "do": do,
-             # do action1 - actionN
-             "alias": create_alias,
-             # alias name comm_to_execute
-             "settings": change_settings,
-             # settings key - value
-             "char": char,
-             # char
-             "info": info,
-             # info
-             "hist": hist,
-             # hist
-             "help": print_readme,
-             # help
-             "clear_hist": clear_hist,
-             # clear_hist
-             "refresh": refresh,
-             # refresh
-             "say": text_to_chat,
-             # say message
-             "cancel": cancel,
-             # cancel
-             "jump": jump_to_cage,
-             # jump row - column
-             "wait": wait_for,
-             # wait seconds_from - seconds_to
-             "rabbit_game": start_rabbit_game,
-             # rabbit_game number_of_games_to_play
-             "balance": print_rabbits_balance,
-             # balance
-             "inv": print_inv,
-             # inv
-             "c": print_cage_info,
-             "с": print_cage_info,  # дубликат команды для с на латинице/кириллице
-             # cage row - column
-             "q": end_session,
-             # q
-             "bury": bury_handler,
-             # bury item_img_id - level
-             "loop": loop_handler,
-             # loop alias_name
-             "find_item": find_items,
-             # find_items item_id1 - item_id2
-             "find_cat": find_cats,
-             # find_cat cat_name1 - cat_nameN
-             "pathfind": pathfind_handler,
-             # pathfind row - column
-             "param": check_parameter,
-             # param param_name
-             "skill": check_skill,
-             "findme": find_my_coords,
-             }
+        if await self.driver.is_held():
+            self.driver.quit()
+
+        if await self.driver.is_action_active():
+            seconds = await self.driver.check_time()
+            await self.print_timer(console_string="Действие уже совершается!", seconds=seconds)
+            return False
+        elements = await self.driver.locate_elements(f"//span[text()='{location_name.replace(" (о)", "")}' "
+                                                     f"and @class='move_name']/preceding-sibling::*")
+        if not elements:
+            return False
+        random_element = random.sample(elements, 1)[0]
+        has_moved = await self.driver.click(given_element=random_element,
+                                            offset_range=(40, 70))
+        if " (о)" in location_name:
+            seconds = random.uniform(0.5, 3)
+            await self.print_timer(console_string=f"Совершён переход с отменой в локацию {location_name}",
+                                   seconds=seconds)
+            await self.driver.click(xpath="//a[@id='cancel']")
+            await self.wait_for(1, 3)
+            return has_moved
+        seconds = await self.driver.check_time() + random.uniform(self.settings["short_break_duration"][0],
+                                                                  self.settings["short_break_duration"][1])
+        await self.print_timer(console_string=f"Совершён переход в локацию {location_name}",
+                               seconds=seconds)
+        if show_availables:
+            self.logger.info(f"Доступные локации: {', '.join(await self.driver.get_available_locations())}")
+        await self.trigger_long_break()
+        self.logger.info(f"Совершён переход в локацию {location_name}.")
+
+        return has_moved
+
+    async def bury_item(self, item_img_id: str, level: int):
+        await self.driver.click(xpath=f"//div[@class='itemInMouth']/img[@src='things/{item_img_id}.png']",
+                                offset_range=(10, 10))
+        await self.wait_for(0.3, 0.6)
+        slider = await self.driver.locate_element(
+            "//div[@id='layer']/span[@class='ui-slider-handle ui-state-default ui-corner-all']")
+        await self.driver.click(given_element=slider)
+        while level != 1:
+            await self.wait_for(0.1, 0.5)
+            slider.send_keys(Keys.ARROW_RIGHT)
+            level -= 1
+        await self.driver.click(xpath="//a[text()='Закопать']")
+        seconds = await self.driver.check_time() + random.uniform(
+            self.settings["short_break_duration"][0], self.settings["short_break_duration"][1])
+        await self.print_timer(seconds=seconds)
+
+    async def find_my_coords(self, verbose=True) -> (int, int):
+        my_info = await self.driver.find_cat_on_loc([self.settings["my_id"]])
+        my_coords = my_info[2:]
+        if verbose:
+            current_location = self.driver.get_current_location()
+            self.logger.info(f"Вы находитесь на локации «{current_location}» на клетке {my_coords[0]}x{my_coords[1]}.")
+        return my_coords
+
+    async def get_last_cw3_message_volume(self) -> int:
+        chatbox = await self.driver.locate_element(xpath="//div[@id='chat_msg']")
+        msg_element = chatbox.find_element(By.XPATH, value="//span/table/tbody/tr/td/span")
+        if not msg_element:
+            self.logger.info("В Игровой нет сообщений.")
+            return -1
+        volume_str = msg_element.get_attribute("class")
+        volume = int("".join([i for i in volume_str if i.isdigit()]))
+        return volume
+
+    async def check_for_warning(self) -> bool:
+        """ *CONSTRUCTION NOISES* """
+
+        error_element = await self.driver.locate_element(xpath="//p[id='error']")
+        error_style = error_element.get_attribute("style")
+        return bool("block" in error_style)
+
+    async def check_cage(self, cage_to_check: tuple, max_checks=10) -> int:
+        """ *CONSTRUCTION NOISES* """
+
+        checks = 0
+        safe_cage = await self.find_my_coords(verbose=False)
+        current_msg_count = self.count_cw3_messages()
+        danger_level = -2
+        while checks < max_checks:
+            await self.jump_to_cage(cage_to_check, verbose=False)
+            last_msg_count = self.count_cw3_messages()
+            if last_msg_count > current_msg_count:
+                danger_level = self.get_last_cw3_message_volume()
+                break
+            await self.wait_for(1, 2)
+            await self.jump_to_cage(safe_cage, verbose=False)
+        self.logger.info(f"danger_level {danger_level}" )
+        return danger_level
+
+    async def count_cw3_messages(self) -> int:
+        chatbox = await self.driver.locate_element("//div[@id='chat_msg']")
+        msg_list = chatbox.find_elements(By.XPATH, value="//span/table/tbody/tr/td/span")
+        return len(msg_list)
+
+    async def end_session(self):
+        """ Завершить текущую сессию и закрыть вебдрайвер. Использование:
+         q """
+
+        self.logger.info("\nВебдрайвер закрывается...")
+        self.driver.quit()
 
 if __name__ == "__main__":
-    config = clicker_utils.load_config()
-    settings, action_dict, alias_dict, parameters_dict, skills_dict = (config["settings"], config["actions"],
-                                                                       config["aliases"], config["parameters"],
-                                                                       config["skills"])
-    print("Настройки загружены...")
-    if settings["my_id"] == "1":
-        print("[!!!] Параметр my_id в файле config.json не заполнен, поиск пути по клеткам \n"
-              "\t и (в будущем) автотренировки не будут работать! Введите settings my_id - 1, заменив 1 на ваш ID, \n"
-              "\t либо не используйте автокач ПУ в опасных локациях! Кликер ВЫЛЕТИТ и вы УТОНЕТЕ!")
-
-    driver = browser_navigation.DriverWrapper(long_break_chance=settings["long_break_chance"],
-                                              long_break_duration=settings["long_break_duration"],
-                                              short_break_duration=settings["short_break_duration"],
-                                              critical_sleep_pixels=settings["critical_sleep_pixels"],
-                                              is_headless=settings["is_headless"],
-                                              driver_path=settings["driver_path"],
-                                              max_waiting_time=settings["max_waiting_time"],
-                                              turn_off_timer=settings["turn_off_dynamic_timer"])
-
-    print(f"Игровая загружается, если прошло более {settings['max_waiting_time'] * 10} секунд - перезапустите кликер.")
-    driver.get("https://catwar.net/cw3/")  # vibecheck https://bot.sannysoft.com/
-
-    if driver.current_url != "https://catwar.net/cw3/":
-        print("Для включения кликера вам необходимо залогиниться в варовский аккаунт.\n"
-              "ВНИМАНИЕ: все ваши данные (почта и пароль) сохраняются в папке selenium (либо в профилях chrome),"
-              " она создаётся в той же папке, \n"
-              "куда вы поместили этот скрипт (main.py). НЕ ОТПРАВЛЯЙТЕ НИКОМУ папку selenium, \n"
-              "для работы кликера нужен main.py, browser_navigation.py, clicker_utils.py и config.json.\n"
-              "Все команды кликера работают ИЗ ИГРОВОЙ!")
-    else:
-        info()
-
-command = "null"
-while command != "q":
-    command = input(">>> ")
-    try:
-        parse_command(command)
-    except (KeyboardInterrupt, ProtocolError):
-        end_session()
-        break
-    except Exception as exception:
-        print(type(exception).__name__)
-        clicker_utils.crash_handler(exception)
-        end_session()
-        break
+    app = ChronoclickerGUI()

@@ -1,28 +1,11 @@
+import asyncio
 import datetime
 import json
 import os
-import sys
-import time
+import random
 import traceback
 
-
-def print_timer(console_string: str, seconds: float, turn_off_timer=False) -> bool:
-    """ Печатать таймер до окончания действия с подписью console_string """
-
-    try:
-        if turn_off_timer:
-            seconds = round(seconds)
-            print(f"{console_string}. Осталось {seconds // 60} мин {seconds % 60} с.")
-            time.sleep(seconds)
-            return False
-        for i in range(round(seconds), -1, -1):
-            sys.stdout.write(f"\r{console_string}. Осталось {i // 60} мин {i % 60} с.")
-            sys.stdout.flush()
-            time.sleep(1)
-        sys.stdout.write("\n")
-        return False
-    except KeyboardInterrupt:
-        return True
+from selenium.webdriver.remote.webelement import WebElement
 
 
 def get_next_index(length, index=-1, direction=1):
@@ -38,17 +21,18 @@ def get_next_index(length, index=-1, direction=1):
     return index, direction
 
 
-def load_config() -> dict:
-    """ Загрузить файл настроек config.json """
+def load_json(filename: str) -> dict:
+    """ Загрузить файл настроек и данных об игре """
 
     try:
-        with open("config.json", "r", encoding="utf-8") as file:
+        with open(filename, "r", encoding="utf-8") as file:
             parsed_json: dict = json.load(file)
             return parsed_json
     except FileNotFoundError:
-        file = open("config.json", "w")
+        file = open(filename, "w")
         file.close()
-        load_config()
+        load_json(filename)
+        return {}
 
 
 def rewrite_config(new_config: dict):
@@ -56,7 +40,6 @@ def rewrite_config(new_config: dict):
 
     with open("config.json", "w", encoding="utf-8") as file:
         file.write(json.dumps(new_config, ensure_ascii=False, indent=4))
-    print("Настройки обновлены!")
 
 
 def crash_handler(exception_type: Exception):
@@ -71,9 +54,7 @@ def crash_handler(exception_type: Exception):
     print(f"Кликер вылетел, тип ошибки: {type(exception_type).__name__}. Крашлог находится по пути {crash_path}")
     with open(crash_path, "w") as crashlog:
         stacktrace = traceback.format_exc()
-        crashlog.writelines(["---CHRONOCLICKER CRASHLOG---", "\n", "Time: ", crash_time, "\n",
-
-                            stacktrace])
+        crashlog.writelines(["---CHRONOCLICKER CRASHLOG---", "\n", "Time: ", crash_time, "\n", stacktrace])
 
 
 def pathfind(start, end, forbidden_cages=()) -> list:
@@ -106,3 +87,19 @@ def pathfind(start, end, forbidden_cages=()) -> list:
 def get_key_by_value(dictionary: dict, look_for):
     result = next((key for key, value in dictionary.items() if value == look_for), None)
     return result
+
+
+def get_text(element: WebElement, max_retries=5, retries=0) -> str:
+    try:
+        return element.text
+    except AttributeError:
+        if retries == max_retries:
+            return ""
+        return get_text(element, max_retries, retries + 1)
+
+
+async def wait_for(start: float | int, end=None):
+    if end is None:
+        end = start + start / 10
+    seconds = random.uniform(start, end)
+    await asyncio.sleep(seconds)

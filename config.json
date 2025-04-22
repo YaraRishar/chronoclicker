@@ -10,7 +10,7 @@
             10
         ],
         "critical_sleep_pixels": 40,
-        "is_headless": true,
+        "is_headless": false,
         "driver_path": "",
         "max_waiting_time": 1,
         "turn_off_dynamic_timer": false,

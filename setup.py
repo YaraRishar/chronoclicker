@@ -1,8 +1,7 @@
 from cx_Freeze import setup, Executable
 
 executables = [Executable("main.py", icon="icon.png", target_name="chronoclicker")]
-files = ["config.json", "gamedata.json", "icon.png", "README.md",
-         "resources/readme_instruction.png", "resources/readme_instruction_raw.png"]
+files = ["config.json", "gamedata.json", "README.md", ["resources/", "resources"]]
 
 setup(name="Chronoclicker",
       version="2.1",

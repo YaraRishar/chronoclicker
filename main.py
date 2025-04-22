@@ -107,7 +107,7 @@ class ChronoclickerGUI:
         Thread(target=self.start_driver_loop, daemon=True).start()
 
         self.root = tk.Tk()
-        self.root.iconphoto(False, tk.PhotoImage(file="icon.png"))
+        self.root.iconphoto(False, tk.PhotoImage(file="resources/icon.png"))
         self.root.title("chronoclicker")
         # ttk.Style().configure("TButton", relief="flat", background="#ccc")
 

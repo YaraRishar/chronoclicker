@@ -90,7 +90,7 @@ class Cage:
         element = await self.driver.locate_element(xpath=xpath)
         style_str = element.get_attribute("style")
         url = re.findall(pattern=r'url\(\"(.*?)\.png', string=style_str)[0]
-        url = "https://catwar.net/" + url + ".png"
+        url = self.driver.settings["catwar_url"] + url + ".png"
         return url
 
     async def get_cat_size(self) -> int:
@@ -106,7 +106,7 @@ class Cage:
         if not element:
             return ""
         cat_id: str = element.get_attribute(name="href")
-        cat_id = cat_id.replace("https://catwar.net/cat", "")
+        cat_id = cat_id.replace(self.driver.settings["catwar_url"], "")
         return cat_id
 
     async def get_move_name(self) -> str:
@@ -124,7 +124,7 @@ class Cage:
             self.driver.logger.info(f"Переход на локацию {self.move_name}")
             return
         if self.items:
-            items_string = [f"https://catwar.net/cw3/things/{i}.png" for i in self.items]
+            items_string = [f"{self.driver.settings['catwar_url']}/cw3/things/{i}.png" for i in self.items]
             self.driver.logger.info(f"Предметы на клетке: {", ".join(items_string)}")
         if self.cat_name:
             self.cat_rank = await self.get_cat_rank()
@@ -136,7 +136,7 @@ class Cage:
                   f"Рост: {self.cat_size}%, ссылка на окрас: {self.cat_color_url}")
             self.cat_items = await self.get_cat_items()
             if self.cat_items:
-                items_string = [f"https://catwar.net/cw3/things/{i}.png" for i in self.cat_items]
+                items_string = [f"{self.driver.settings['catwar_url']}/cw3/things/{i}.png" for i in self.cat_items]
                 self.driver.logger.info(f"Предметы во рту: {", ".join(items_string)}")
 
     async def jump(self):
@@ -169,5 +169,5 @@ class Cage:
             return False
         self.driver.logger.info("Предмет подобран! Предметы во рту:")
         for i in new_inv:
-            self.driver.logger.info(f"https://catwar.net/cw3/things/{i}.png")
+            self.driver.logger.info(f"{self.driver.settings['catwar_url']}/cw3/things/{i}.png")
         return True

@@ -21,6 +21,16 @@ def get_next_index(length, index=-1, direction=1):
     return index, direction
 
 
+def scroll_list(length, direction, previous_index):
+    new_index = previous_index + direction
+    if new_index < -length:
+        new_index = -length
+    elif new_index >= 0:
+        new_index = -1
+
+    return new_index
+
+
 def load_json(filename: str) -> dict:
     """ Загрузить файл настроек и данных об игре """
 

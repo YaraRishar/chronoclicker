@@ -75,16 +75,17 @@ class DriverWrapper(WebDriver):
         self.implicitly_wait(self.settings["max_waiting_time"])
 
         self.logger.info(f"Игровая загружается, если прошло более минуты - перезапустите кликер.")
-        self.get("https://catwar.net/cw3/")
-        if self.current_url != "https://catwar.net/cw3/":
+        self.get(f"{self.settings['catwar_url']}/cw3/")
+        if self.current_url != f"{self.settings['catwar_url']}/cw3/":
             self.logger.info("Для включения кликера вам необходимо залогиниться в варовский аккаунт.\n"
                              "ВНИМАНИЕ: все ваши данные (почта и пароль) "
                              "сохраняются в папке selenium (либо в профилях chrome), "
                              "она создаётся в той же папке, куда вы поместили этот "
                              "скрипт. НЕ ОТПРАВЛЯЙТЕ НИКОМУ папку selenium. \n"
                              "Все команды кликера работают ИЗ ИГРОВОЙ!")
-        elif self.current_url == "https://catwar.net/cw3/" and not self.settings["is_headless"]:
-            self.logger.info("\t\t[!!!] Кликер может зависнуть, если окно браузера не в фокусе. Чтобы этого избежать, "
+        elif self.current_url == f"{self.settings['catwar_url']}/cw3/" and not self.settings["is_headless"]:
+            self.logger.info("\t\t[!!!] Кликер может зависнуть, если окно браузера "
+                             "не в фокусе. Чтобы этого избежать, "
                              "пропишите команду settings is_headless - True")
 
     async def locate_element(self, xpath: str, do_wait=True) -> WebElement | None:
@@ -209,7 +210,8 @@ class DriverWrapper(WebDriver):
     async def get_parameter(self, param_name) -> float | int:
         """ Проверить параметр param_name, вернуть его значение в процентах """
 
-        element = await self.locate_element(f"//div[@id='{param_name}']/div[@class='bar']/div[@class='bar-data']")
+        element = await self.locate_element(f"//div[@id='{param_name}']/"
+                                            f"div[@class='bar']/div[@class='bar-data']")
         if not element:
             return -1
         percents = re.search(r": (\d*)%", element.text)
@@ -218,7 +220,8 @@ class DriverWrapper(WebDriver):
     async def check_skill(self, skill_name_server, skill_name) -> str:
         """ Проверить уровень и дробь навыка """
 
-        await self.mouse_over(xpath=f"//div[@id='{skill_name_server}']", hover_for=random.uniform(0.1, 0.2))
+        await self.mouse_over(xpath=f"//div[@id='{skill_name_server}']",
+                              hover_for=random.uniform(0.1, 0.2))
         skill_name = skill_name[0].upper() + skill_name[1:]
         xpath = f"//div[@class='tooltip-inner' and contains(text(), '{skill_name}')]"
         tooltip_elem = await self.locate_element(xpath=xpath)
@@ -254,7 +257,8 @@ class DriverWrapper(WebDriver):
             if message_bundle == temp_message:
                 continue
             message_time = datetime.now()
-            self.logger.info(f"Чат |\t{message_bundle[0]} - {message_bundle[1]} | {message_time.strftime('%H:%M:%S')}")
+            self.logger.info(f"Чат |\t{message_bundle[0]} - {message_bundle[1]} "
+                             f"| {message_time.strftime('%H:%M:%S')}")
             for name in self.settings["notify_about"]:
                 if name in message_bundle[0]:
                     await self.play_sound()
@@ -277,6 +281,19 @@ class DriverWrapper(WebDriver):
         element = await self.locate_element(xpath="//a[@id='cancel']", do_wait=False)
         return element is not None
 
+    async def login_sequence(self, mail: str, password: str):
+        mail_xpath = "//input[@id='mail']"
+        password_xpath = "//input[@id='pass']"
+        login_xpath = "//input[@value='Войти']"
+
+        await self.click(mail_xpath)
+        await self.type_in_chat(mail, mail_xpath, type_speed_coeff=0)
+
+        await self.click(password_xpath)
+        await self.type_in_chat(password, password_xpath, type_speed_coeff=0)
+
+        await self.click(login_xpath)
+
     async def get_available_actions(self, action_dict) -> list:
         """ Получить список доступных в данный момент действий """
 
@@ -284,9 +301,14 @@ class DriverWrapper(WebDriver):
         actions_list = []
         for element in elements:
             for key, value in action_dict.items():
-                if int(element.get_attribute("data-id")) == value:
+                if element.get_attribute("data-id") == value:
                     actions_list.append(key)
                     break
+                elif "hunt" in element.get_attribute("data-id"):
+                    actions_list.append("охота")
+                    break
+        if not actions_list:
+            return ["нет."]
         return actions_list
 
     async def get_available_locations(self) -> list:
@@ -322,21 +344,23 @@ class DriverWrapper(WebDriver):
 
         return last_message
 
-    async def type_in_chat(self, text: str, entry_xpath: str):
+    async def type_in_chat(self, text: str, entry_xpath: str, type_speed_coeff=1.0):
         """ Написать сообщение в чат (занимает реалистичное количество времени на набор текста) """
 
         text = [i for i in text]
         chatbox: WebElement = await self.locate_element(entry_xpath)
+        chatbox.clear()
         for i in range(len(text)):
             chatbox.send_keys(text[i])
             if text[i - 1] == text[i]:
-                await wait_for(0, 0.1)
+                await wait_for(0, 0.1 * type_speed_coeff)
                 continue
-            await wait_for(0.05, 0.5)
+            await wait_for(0.05 * type_speed_coeff, 0.5 * type_speed_coeff)
         if len(text) < 5:
-            await wait_for(1, 3)
+            await wait_for(0.5, 1.5)
 
-    async def rabbit_game(self, lower_bound=-9999999999, upper_bound=9999999999) -> bool:
+    async def rabbit_game(self, lower_bound=-9999999999,
+                          upper_bound=9999999999) -> bool:
         """ Игра в числа """
 
         last_message = ""
@@ -463,7 +487,8 @@ class DriverWrapper(WebDriver):
         cat_element = await self.locate_element(f"//span[@class='cat_tooltip']/u/a[text()='{cat_name}']")
         if not cat_element:
             return "N/A"
-        href = "catwar.net" + cat_element.get_attribute("href")
+        catwar_url = self.settings["catwar_url"].replace("https://", "")
+        href = catwar_url + cat_element.get_attribute("href")
         return href
 
     async def get_current_location(self) -> str:
@@ -517,3 +542,24 @@ class DriverWrapper(WebDriver):
 
     def get_weight(self):
         pass
+
+    async def get_energy(self, cat_id):
+        if str(cat_id) == "1":
+            cat_id = self.settings['my_id']
+        energy_xpath = f"//div[@id='arrow{cat_id}']/table/tbody/tr/td[@class='arrow_green']"
+        energy_element = await self.locate_element(energy_xpath, do_wait=False)
+        style_str = energy_element.get_attribute("style")
+        energy = int(re.match(r"width: \d*", style_str)[1])
+        return energy
+
+
+    async def get_arrow_angle(self, cat_id):
+        if str(cat_id) == "1":
+            cat_id = self.settings['my_id']
+        arrow_xpath = f"//div[@id='arrow{cat_id}']"
+        arrow_element = await self.locate_element(arrow_xpath, do_wait=False)
+        style_str = arrow_element.get_attribute("style")
+        degrees = int(re.match(r"rotate\(\d*", style_str)[1])
+        return degrees
+
+

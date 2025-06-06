@@ -5,6 +5,7 @@ import os
 import random
 import re
 import threading
+import time
 import tkinter as tk
 from functools import partial
 from threading import Thread
@@ -114,6 +115,8 @@ class ChronoclickerGUI:
         self.root.geometry("800x600")
         self.root.iconphoto(False, tk.PhotoImage(file="resources/icon.png"))
         self.root.title("chronoclicker")
+        self.loading_label = tk.Label(self.root, text="Загрузка...", font=("Verdana", 22))
+        self.loading_label.pack(padx=200, pady=200)
 
         self.login_frame = tk.Frame(self.root)
         self.main_frame = tk.Frame(self.root)
@@ -146,9 +149,6 @@ class ChronoclickerGUI:
         self.timer.set("Действие не выполняется.")
         self.timer_label = ttk.Label(self.main_frame, textvariable=self.timer, font="Verdana")
 
-        tk.Misc.rowconfigure(self.main_frame, 0, weight=1)
-        tk.Misc.columnconfigure(self.main_frame, 0, weight=1)
-
         self.driver: DriverWrapper = None
         asyncio.run_coroutine_threadsafe(self.open_browser(), self.driver_loop)
         asyncio.run_coroutine_threadsafe(self.run_script(comm_str="info"), self.driver_loop)
@@ -160,6 +160,7 @@ class ChronoclickerGUI:
 
     def show_login_screen(self):
         self.root.geometry("420x180")
+        self.loading_label.destroy()
         tk.Misc.rowconfigure(self.login_frame, 0, weight=1)
         tk.Misc.columnconfigure(self.login_frame, 0, weight=1)
         self.login_frame.pack(padx=20, pady=20)
@@ -179,6 +180,9 @@ class ChronoclickerGUI:
             asyncio.run_coroutine_threadsafe(self.run_script(comm_str="info"), self.driver_loop)
 
         self.root.geometry("800x600")
+        self.loading_label.destroy()
+        tk.Misc.rowconfigure(self.main_frame, 0, weight=1)
+        tk.Misc.columnconfigure(self.main_frame, 0, weight=1)
         self.main_frame.pack()
         self.log_area.grid(column=0, columnspan=5, row=0, rowspan=3, padx=10, pady=10)
         self.comm_entry.grid(column=0, row=4)
@@ -200,12 +204,10 @@ class ChronoclickerGUI:
             return
         self.login_button.config(text="Загрузка...")
         threading.Thread(target=self.run_login_sequence, args=(mail, password)).start()
-        # asyncio.run(self.driver.login_sequence(mail, password))
-        # if "login" not in self.driver.current_url:
-        #     self.show_main_screen()
 
     def run_login_sequence(self, mail, password):
         asyncio.run(self.driver.login_sequence(mail, password))
+        time.sleep(1)
         if "login" not in self.driver.current_url:
             self.show_main_screen()
         else:
@@ -289,8 +291,7 @@ class ChronoclickerGUI:
             self.previous_comms.append(comm_str)
             self.logger.info(f">>> {comm_str}")
             self.comm_entry.delete(0, tk.END)
-        self.script_task = asyncio.run_coroutine_threadsafe(
-            self.parse_command(comm_str), self.driver_loop)
+        self.script_task = asyncio.run_coroutine_threadsafe(self.parse_command(comm_str), self.driver_loop)
 
     async def wait_for(self, start, end=None, do_random=True):
         if not do_random:
@@ -341,13 +342,15 @@ class ChronoclickerGUI:
         partial(self.root.after, 0, self.update_log)()
         if self.stop_event.is_set():
             self.stop_script()
+        # while self.pause_event.is_set() or self.stop_event.is_set():
         while self.pause_event.is_set():
             await asyncio.sleep(seconds)
 
     def stop_script(self):
+        print("STOP SCRIPT")
         self.timer.set("Действие не выполняется.")
         self.script_task = None
-        self.stop_event.clear()
+        # self.stop_event.clear()
 
     def pause_script(self):
         self.pause_event.set()
@@ -377,23 +380,20 @@ class ChronoclickerGUI:
         if multi_comm is None:
             self.logger.info("Введите название сокращения или команду. Пример: loop do принюхаться - копать землю")
             return
-        if multi_comm[0] in self.driver.alias_dict.keys():
-            alias_name = multi_comm[0]
-            await self.loop_alias(alias_name)
+        # if multi_comm[0] in self.driver.alias_dict.keys():
+        #     alias_name = multi_comm[0]
+        #     await self.loop_alias(alias_name)
         await self.loop_comm(multi_comm)
 
-    async def loop_alias(self, alias_name):
-        while not self.stop_event.is_set() or self.script_task is None:
-            await self.multi_comm_handler(self.driver.alias_dict[alias_name])
-            await self.trigger_long_break()
-        self.stop_event.clear()
-
     async def loop_comm(self, comm):
-        print("will loop comm: \n", comm)
-        while not self.stop_event.is_set() or self.script_task is None:
+        # True while not stopped and script is not None
+        while not(self.stop_event.is_set() or self.script_task is None):
+            print("self.stop_event.is_set()?", self.stop_event.is_set())
+            print("self.script_task is None?", self.script_task is None)
+            print("condition:", not(self.stop_event.is_set() or self.script_task is None))
             await self.multi_comm_handler(comm)
             await self.trigger_long_break()
-        self.stop_event.clear()
+        # self.stop_event.clear()
 
     async def multi_comm_handler(self, multi_comm: str):
         """ Исполнить каждую команду в мультикоманде по очереди """
@@ -414,6 +414,7 @@ class ChronoclickerGUI:
             multi_comm = multi_comm.replace("loop ", "")
             return await self.loop_handler(multi_comm)
         for comm in multi_comm_list:
+            print("multi_comm_list", multi_comm_list, "\ncomm", comm)
             await self.comm_handler(comm)
 
     async def comm_handler(self, comm: str) -> float | int | bool:
@@ -438,6 +439,7 @@ class ChronoclickerGUI:
         if comm == main_comm:
             result = await self.comm_dict[main_comm]()
         else:
+            print(f"self.comm_dict[{main_comm}]({args})")
             result = await self.comm_dict[main_comm](args)
         partial(self.root.after, 0, self.update_log)()
         return result
@@ -475,6 +477,8 @@ class ChronoclickerGUI:
             await self.multi_comm_handler(ternary_list[0])
         else:
             await self.multi_comm_handler(ternary_list[1])
+
+    #   ///////////////////////////////////
 
     def write_to_log(self, text):
         self.logger.info(text)
@@ -529,9 +533,13 @@ class ChronoclickerGUI:
         for action in args:
             if self.stop_event.is_set() or self.script_task is None:
                 return False
+            if await self.driver.is_action_active():
+                seconds = await self.driver.check_time()
+                await self.print_timer(console_string="Действие уже совершается", seconds=seconds)
+                return False
             available_actions = await self.driver.get_available_actions(self.action_dict)
             if action not in available_actions:
-                self.logger.info(f'Действие "{action.title()}" не может быть выполнено. Возможно, действие недоступно/'
+                self.logger.info(f'Действие "{action}" не может быть выполнено. Возможно, действие недоступно/'
                                  f'страница не прогрузилась до конца.'
                                  f'\nДоступные действия: {', '.join(available_actions)}.')
                 continue
@@ -893,7 +901,7 @@ class ChronoclickerGUI:
             return False
         key, value = args
         try:
-            if key == "driver_path" or key == "my_id":
+            if key in ("driver_path", "my_id", "catwar_url"):
                 self.settings[key] = value
             else:
                 self.settings[key] = eval(value)
@@ -949,7 +957,7 @@ class ChronoclickerGUI:
 
         if await self.driver.is_action_active():
             seconds = await self.driver.check_time()
-            await self.print_timer(console_string="Действие уже совершается!", seconds=seconds)
+            await self.print_timer(console_string="Действие уже совершается", seconds=seconds)
             return False
         elements = await self.driver.locate_elements(f"//span[text()='{location_name.replace(" (о)", "")}' "
                                                      f"and @class='move_name']/preceding-sibling::*")

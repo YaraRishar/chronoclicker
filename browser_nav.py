@@ -308,7 +308,7 @@ class DriverWrapper(WebDriver):
                     actions_list.append("охота")
                     break
         if not actions_list:
-            return ["нет."]
+            return ["нет"]
         return actions_list
 
     async def get_available_locations(self) -> list:

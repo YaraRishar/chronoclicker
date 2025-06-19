@@ -106,7 +106,7 @@ class Cage:
         if not element:
             return ""
         cat_id: str = element.get_attribute(name="href")
-        cat_id = cat_id.replace(self.driver.settings["catwar_url"], "")
+        cat_id = "".join([i for i in cat_id if i.isdigit()])
         return cat_id
 
     async def get_move_name(self) -> str:
@@ -139,12 +139,15 @@ class Cage:
                 items_string = [f"{self.driver.settings['catwar_url']}/cw3/things/{i}.png" for i in self.cat_items]
                 self.driver.logger.info(f"Предметы во рту: {", ".join(items_string)}")
 
-    async def jump(self):
-        if self.has_cat():
-            self.driver.logger.info(f"Клетка {self.row}x{self.column} занята котом по имени {self.cat_name}!")
-            return
+    async def jump(self) -> bool:
+        if await self.has_cat():
+            cat_name = await self.get_cat_name()
+            self.driver.logger.info(f"Клетка {self.row}x{self.column} занята котом по имени "
+                                    f"{cat_name}!")
+            return False
         await self.driver.click(xpath=f"//*[@id='cages']/tbody/tr[{self.row}]/td[{self.column}]",
                                 offset_range=(40, 70))
+        return True
 
     async def pick_up_item(self) -> bool:
         old_inv = await self.driver.get_inv_items()

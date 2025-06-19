@@ -297,7 +297,7 @@ class DriverWrapper(WebDriver):
     async def get_available_actions(self, action_dict) -> list:
         """ Получить список доступных в данный момент действий """
 
-        elements = await self.locate_elements("//div[@id='akten']/a[@class='dey has-tooltip']")
+        elements = await self.locate_elements("//div/a[@class='dey has-tooltip']")
         actions_list = []
         for element in elements:
             for key, value in action_dict.items():
@@ -437,9 +437,34 @@ class DriverWrapper(WebDriver):
             except IndexError:
                 pass
 
+    async def count_cw3_messages(self) -> int:
+        chatbox = await self.locate_element("//div[@id='chat_msg']")
+        msg_list = chatbox.find_elements(By.XPATH, value="//span/table/tbody/tr/td/span")
+        return len(msg_list)
+
+    async def do_action_with_cat(self, cat_name: str, action_name: str):
+        cat_pos = await self.find_cat_on_loc([cat_name])
+        cat_pos = cat_pos[2], cat_pos[3]
+        nearest_to_cat = clicker_utils.get_nearest_cages(cat_pos)
+        can_jump_to_cat = False
+        cages_list = await self.get_cages_list(coords_list=nearest_to_cat)
+        random.shuffle(cages_list)
+        for cage in cages_list:
+            if not (await cage.has_cat() or await cage.is_move()):
+                await cage.jump()
+                can_jump_to_cat = True
+                break
+        if not can_jump_to_cat:
+            self.logger.error(f"Рядом с игроком по имени {cat_name} нет свободных клеток!")
+            return
+        selector = await self.locate_element(xpath="//*[@id='mit']")
+        dropdown_object = Select(selector)
+        dropdown_object.select_by_visible_text(cat_name)
+        await wait_for(0.8)
+
     async def is_cat_in_action(self, cat_name: str) -> bool:
-        """ Проверка кота на действие (потереться носом о нос и отменить действие)
-         result = True -> кот занят действием """
+        """ Проверка кота на действие (потереться носом о нос и отменить действие).
+         Возвращает True, если кот занят действием """
 
         selector = await self.locate_element(xpath="//*[@id='mit']")
         dropdown_object = Select(selector)
@@ -452,12 +477,10 @@ class DriverWrapper(WebDriver):
 
         dropdown_object.select_by_visible_text(cat_name)
         await wait_for(0.3)
-        await self.click(xpath="//*[@id='mitok']")
-        await wait_for(0.5)
         await self.click(xpath="//img[@src='actions/9.png']")
-        await wait_for(1.5, 3)
+        await wait_for(1, 2)
         result = await self.click(xpath="//a[@id='cancel']")
-        return result
+        return not result
 
     async def get_hist_list(self) -> list:
         hist = await self.locate_element("//span[@id='ist']")
@@ -511,10 +534,15 @@ class DriverWrapper(WebDriver):
             inv_ids.append(int(re.findall(pattern=r"things\/(\d*)", string=style_str)[0]))
         return inv_ids
 
-    async def get_cages_list(self) -> list[Cage]:
-        """ Получить список элементов всех клеток на поле """
+    async def get_cages_list(self, coords_list=None) -> list[Cage]:
+        """ Получить список элементов всех клеток на поле либо превратить список координат в список клеток """
 
-        cages_list = [Cage(self, row, column) for column in range(1, 11) for row in range(1, 7)]
+        if coords_list is None:
+            cages_list = [Cage(self, row, column) for column in range(1, 11) for row in range(1, 7)]
+            return cages_list
+        cages_list = []
+        for row, column in coords_list:
+            cages_list.append(Cage(self, row, column))
         return cages_list
 
     async def get_move_coords(self, loc_name) -> tuple:
@@ -530,13 +558,13 @@ class DriverWrapper(WebDriver):
 
         cages_list = await self.get_cages_list()
         for cage in cages_list:
-            cat_name = cage.get_cat_name()
-            cat_id = cage.get_cat_id()
+            cat_name = await cage.get_cat_name()
+            cat_id = await cage.get_cat_id()
             if cat_name in names_to_find:
-                location = self.get_current_location()
+                location = await self.get_current_location()
                 return cat_name, location, cage.row, cage.column
             elif cat_id in names_to_find:
-                location = self.get_current_location()
+                location = await self.get_current_location()
                 return cat_id, location, cage.row, cage.column
         return False, False, False, False
 

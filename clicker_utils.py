@@ -4,6 +4,7 @@ import json
 import os
 import random
 import traceback
+from collections import deque
 
 from selenium.webdriver.remote.webelement import WebElement
 
@@ -70,28 +71,34 @@ def crash_handler(exception_type: Exception):
 def pathfind(start, end, forbidden_cages=()) -> list:
     """ Найти кратчайший путь между двумя клетками на поле 6х10 """
 
-    directions = (-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)
-    queue = [(start, [start])]
-    visited = set()
+    directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    queue = deque([(start, [start])])
+    visited = set(forbidden_cages)
     visited.add(start)
-    for cell in forbidden_cages:
-        visited.add(cell)
 
     while queue:
-        current, path = queue.pop(0)
+        current, path = queue.popleft()
         if current == end:
             return path[1:]
 
-        for direction in directions:
-            next_x = current[0] + direction[0]
-            next_y = current[1] + direction[1]
+        for dx, dy in directions:
+            next_x, next_y = current[0] + dx, current[1] + dy
             next_position = (next_x, next_y)
-
-            if next_x in range(1, 7) and next_y in range(1, 11) and next_position not in visited:
+            if 0 <= next_x < 6 and 0 <= next_y < 10 and next_position not in visited:
                 visited.add(next_position)
                 queue.append((next_position, path + [next_position]))
-    print(f"Не удалось найти путь от клетки {start} до клетки {end}!")
     return []
+
+
+def get_nearest_cages(current_position: tuple):
+    directions = (-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)
+    nearest_cages = []
+    for direction in directions:
+        next_x = current_position[0] + direction[0]
+        next_y = current_position[1] + direction[1]
+        if next_x in range(1, 7) and next_y in range(1, 11):
+            nearest_cages.append((next_x, next_y))
+    return nearest_cages
 
 
 def get_key_by_value(dictionary: dict, look_for):

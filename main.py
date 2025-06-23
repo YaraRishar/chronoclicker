@@ -197,8 +197,6 @@ class ChronoclickerGUI:
             solver.mark_cage_level(next_move, danger_level)
             await self.wait_for(1, 1.5)
 
-
-
     async def find_my_coords(self, verbose=True) -> (int, int):
         my_info = await self.driver.find_cat_on_loc([self.settings["my_id"]])
         my_coords = my_info[2:]
@@ -295,7 +293,8 @@ class ChronoclickerGUI:
 
     def run_login_sequence(self, mail, password):
         asyncio.run(self.driver.login_sequence(mail, password))
-        time.sleep(1)
+        seconds = self.config["settings"]["max_waiting_time"]
+        time.sleep(seconds)
         if "login" not in self.driver.current_url:
             self.show_main_screen()
         else:

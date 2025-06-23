@@ -12,9 +12,9 @@
         "critical_sleep_pixels": 40,
         "is_headless": false,
         "driver_path": "",
-        "max_waiting_time": 1,
+        "max_waiting_time": 3,
         "turn_off_dynamic_timer": false,
-        "my_id": "1526275",
+        "my_id": "1",
         "catwar_url": "https://catwar.net",
         "decoders": {
             "windows": "windows-1251",

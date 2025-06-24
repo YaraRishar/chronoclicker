@@ -19,7 +19,6 @@ from selenium.webdriver.common.by import By
 import cage_utils
 import clicker_utils
 import minesweeper_utils
-# import minesweeper_utils
 from clicker_utils import get_text
 from browser_nav import DriverWrapper
 
@@ -118,13 +117,12 @@ class ChronoclickerGUI:
         self.pause_event = asyncio.Event()
         self.stop_event = asyncio.Event()
 
-        if os.name == "nt":
-            self.decoder_type = self.settings["decoders"]["windows"]
-        else:
-            self.decoder_type = self.settings["decoders"]["linux"]
-
         self.driver_loop = asyncio.new_event_loop()
         Thread(target=self.start_driver_loop, daemon=True).start()
+
+        if os.name == "nt":
+            from ctypes import windll
+            windll.shcore.SetProcessDpiAwareness(1)
 
         self.root = tk.Tk()
         self.root.geometry("800x600")
@@ -344,16 +342,32 @@ class ChronoclickerGUI:
 
     def update_log(self):
         new_lines = []
+        decoder = self.config["settings"]["decoder"]
+        if decoder == "undefined":
+            decoder = clicker_utils.get_decoder(self.logfile_path)
+            self.config["settings"]["decoder"] = decoder
+            self.logger.info(f"\t\t[!!!] Декодировщик, указанный в config.json (undefined), не "
+                             f"совпадает с обнаруженным ({decoder}). "
+                             f"Пропишите эту команду, чтобы обновить настройки:\n"
+                             f"\tsettings decoder - {decoder}")
+
         with open(self.logfile_path, "rb") as f:
             f.seek(self.last_log_idx, os.SEEK_SET)
-            decoder = codecs.getincrementaldecoder(self.decoder_type)(errors="replace")
+            decoder = codecs.getincrementaldecoder(decoder)(errors="replace")
             for raw_line in f:
-                text_line = decoder.decode(raw_line)
-                new_lines.append(text_line.rstrip('\r\n') + "\n")
+                try:
+                    text_line = decoder.decode(raw_line)
+                    new_lines.append(text_line.rstrip('\r\n') + "\n")
+                except UnicodeDecodeError:
+                    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+                    text_line = decoder.decode(raw_line)
+                    new_lines.append(text_line.rstrip('\r\n') + "\n")
+
             tail = decoder.decode(b'', final=True)
             if tail:
                 new_lines.append(tail + "\n")
             self.last_log_idx = f.tell()
+
         self.log_area.config(state="normal")
         self.log_area.insert(tk.END, "".join(new_lines))
         self.log_area.see(tk.END)
@@ -988,7 +1002,7 @@ class ChronoclickerGUI:
             return False
         key, value = args
         try:
-            if key in ("driver_path", "my_id", "catwar_url"):
+            if key in ("driver_path", "my_id", "catwar_url", "decoder"):
                 self.settings[key] = value
             else:
                 self.settings[key] = eval(value)

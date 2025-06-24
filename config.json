@@ -16,10 +16,7 @@
         "turn_off_dynamic_timer": false,
         "my_id": "1",
         "catwar_url": "https://catwar.net",
-        "decoders": {
-            "windows": "windows-1251",
-            "linux": "utf-8"
-        }
+        "decoder": "utf-8"
     },
     "aliases": {
         "кач_актив": "patrol Морозная поляна - Поляна для отдыха - Морозная поляна - Каменная гряда - Морозная поляна - Великое Древо - Морозная поляна",

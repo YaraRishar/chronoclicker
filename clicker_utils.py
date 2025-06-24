@@ -6,6 +6,7 @@ import random
 import traceback
 from collections import deque
 
+import chardet
 from selenium.webdriver.remote.webelement import WebElement
 
 
@@ -120,3 +121,14 @@ async def wait_for(start: float | int, end=None):
         end = start + start / 10
     seconds = random.uniform(start, end)
     await asyncio.sleep(seconds)
+
+
+def get_decoder(logfile_path: str) -> str:
+    """ Возвращает название декодировщика, который подходит для вашей системы """
+
+    with open(logfile_path, "rb") as f:
+        raw_data = f.read(512)
+        decoder = chardet.detect(raw_data)["encoding"]
+        if not decoder or chardet.detect(raw_data)["confidence"] < 0.7:
+            decoder = "utf-8"
+    return decoder

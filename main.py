@@ -289,7 +289,10 @@ class ChronoclickerGUI:
         self.last_comm_idx = -1
 
     def up_button_pressed(self, _event):
-        prev_comm = self.previous_comms[self.last_comm_idx]
+        try:
+            prev_comm = self.previous_comms[self.last_comm_idx]
+        except IndexError:
+            return
 
         self.comm_entry.select_clear()
         self.comm_entry.delete(0, tk.END)

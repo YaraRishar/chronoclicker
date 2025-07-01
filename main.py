@@ -14,7 +14,6 @@ from threading import Thread
 from tkinter import ttk, scrolledtext, StringVar
 
 from selenium.webdriver import Keys
-from selenium.webdriver.common.by import By
 
 import cage_utils
 import clicker_utils
@@ -25,6 +24,7 @@ from browser_nav import DriverWrapper
 
 class ChronoclickerGUI:
     def __init__(self):
+        self.driver = None
         now = datetime.datetime.now()
         folders = ["logs", "crashlogs", "resources"]
         for folder in folders:
@@ -51,6 +51,7 @@ class ChronoclickerGUI:
 
         self.comm_dict: Dict[str, Union[CallableType, CallableWithParamsType]] = {
             "test": self.test,
+            "exit_char": self.exit_account,
             "do_with": self.do_action_with_cat_handler,
             "aliases": self.print_aliases,
             "patrol": self.patrol,
@@ -128,27 +129,27 @@ class ChronoclickerGUI:
         self.root.geometry("800x600")
         self.root.iconphoto(False, tk.PhotoImage(file="resources/icon.png"))
         self.root.title("chronoclicker")
-        self.loading_label = tk.Label(self.root, text="Загрузка... \n"
-                                                      "Если это сообщение не исчезает, \n"
-                                                      "попробуйте запустить кликер от админа.", font=("Verdana", 18))
-        self.loading_label.pack(padx=100, pady=100)
 
         self.login_frame = tk.Frame(self.root)
         self.main_frame = tk.Frame(self.root)
+        self.loading_frame = tk.Frame(self.root)
+
+        self.loading_label = tk.Label(self.loading_frame, text="Загрузка... \n"
+                                                      "Если это сообщение не исчезает, \n"
+                                                      "попробуйте запустить кликер от админа.", font=("Verdana", 18))
+        self.show_loading_screen()
         ttk.Style().configure("TButton", relief="flat")
 
         self.mail_entry = tk.Entry(self.login_frame)
         self.password_entry = tk.Entry(self.login_frame, show="*")
         self.password_show_btn = tk.Button(self.login_frame, text=u"\U0001F441",
                                            command=self.show_password, relief="flat")
-        self.login_button = tk.Button(self.login_frame, text="Войти",
-                                      command=self.do_login)
+        self.login_button = tk.Button(self.login_frame, text="Войти", command=self.do_login)
         self.login_status_label = tk.Label(self.login_frame, text="")
 
         self.log_area = scrolledtext.ScrolledText(self.main_frame)
         self.comm_entry = ttk.Entry(self.main_frame, width=50, font="Verdana")
         self.log_area.config(wrap=tk.WORD, state="disabled", font="Verdana")
-
         self.ok_btn = ttk.Button(self.main_frame, text="OK", width=5,
                                  command=self.ok_button_pressed)
         self.pause_btn = ttk.Button(self.main_frame, text=u"\u23F8", width=5,
@@ -156,8 +157,7 @@ class ChronoclickerGUI:
         self.resume_btn = ttk.Button(self.main_frame, text=u"\u23F5", width=5,
                                      command=self.resume_script, state=tk.DISABLED)
         self.reload_btn = ttk.Button(self.main_frame, text=u"\u27F3", width=5,
-                                     command=lambda: partial(self.main_frame.after,
-                                                             0, self.update_log)(),
+                                     command=lambda: partial(self.main_frame.after, 0, self.update_log)(),
                                      state=tk.NORMAL)
         self.stop_btn = ttk.Button(self.main_frame, text=u"\u23F9", width=5,
                                    command=self.stop_event.set, state=tk.NORMAL)
@@ -165,86 +165,21 @@ class ChronoclickerGUI:
         self.timer.set("Действие не выполняется.")
         self.timer_label = ttk.Label(self.main_frame, textvariable=self.timer, font="Verdana")
 
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        partial(self.root.after, 100, self.initialize_driver)()
+        self.root.mainloop()
+
+    def initialize_driver(self):
         self.driver: DriverWrapper = DriverWrapper(self.logger)
         asyncio.run_coroutine_threadsafe(self.open_browser(), self.driver_loop)
         asyncio.run_coroutine_threadsafe(self.run_script(comm_str="info"), self.driver_loop)
-
         partial(self.main_frame.after, 0, self.update_log)()
 
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.root.mainloop()
-
-    async def test(self, _args=None):
-        my_coords = await self.find_my_coords(verbose=False)
-        my_coords = my_coords[0] - 1, my_coords[1] - 1
-        print(my_coords)
-        solver = minesweeper_utils.MinesweeperSolver(player_position=my_coords, move_to_world=(0, 5))
-        print("solver initiated")
-        for cage in [(0, 0), (0, 1), (0, 2)]:
-            danger_level = await self.check_cage(cage)
-            solver.mark_cage_level(cage, danger_level)
-            await self.wait_for(1, 1.5)
-
-        next_move = (0, 0)
-        while next_move != (-1, -1):
-            next_move = solver.make_move()
-            if next_move == (-1, -1):
-                print("WON???!!!")
-                return
-            danger_level = await self.check_cage(next_move)
-            solver.mark_cage_level(next_move, danger_level)
-            await self.wait_for(1, 1.5)
-
-    async def find_my_coords(self, verbose=True) -> (int, int):
-        my_info = await self.driver.find_cat_on_loc([self.settings["my_id"]])
-        my_coords = my_info[2:]
-        if verbose:
-            current_location = self.driver.get_current_location()
-            self.logger.info(f"Вы находитесь на локации "
-                             f"«{current_location}» на клетке {my_coords[0]}x{my_coords[1]}.")
-        return my_coords
-
-    async def get_last_cw3_message_volume(self) -> int:
-        chatbox = await self.driver.locate_element(xpath="//div[@id='chat_msg']")
-        msg_element = chatbox.find_element(By.XPATH, value="//span/table/tbody/tr/td/span")
-        if not msg_element:
-            self.logger.info("В Игровой нет сообщений.")
-            return -1
-        volume_str = msg_element.get_attribute("class")
-        volume = int("".join([i for i in volume_str if i.isdigit()]))
-        self.logger.info(f"volume {volume}")
-        return volume
-
-    async def check_for_warning(self) -> bool:
-        error_element = await self.driver.locate_element(xpath="//p[id='error']")
-        error_style = error_element.get_attribute("style")
-        has_warning = bool("block" in error_style)
-        self.logger.info("has_warning", has_warning)
-        return has_warning
-
-    async def check_cage(self, cage_to_check: tuple, max_checks=5) -> int | str:
-        cage_to_check = cage_to_check[0] + 1, cage_to_check[1] + 1
-        checks = 0
-        safe_cage = await self.find_my_coords(verbose=False)
-        current_msg_count = await self.driver.count_cw3_messages()
-        danger_level = "?"
-        while checks < max_checks:
-            has_jumped = await self.jump_to_cage(cage_to_check, verbose=False)
-            if not has_jumped:
-                break
-            last_msg_count = await self.driver.count_cw3_messages()
-            if last_msg_count > current_msg_count:
-                danger_level = await self.get_last_cw3_message_volume()
-                break
-            await self.wait_for(0.8, 1.5)
-            await self.jump_to_cage(safe_cage, verbose=False)
-        danger_level = 0 if danger_level == "?" else danger_level
-        self.logger.info(f"danger_level {danger_level}")
-        return danger_level
-
     def show_login_screen(self):
+        self.main_frame.pack_forget()
+
         self.root.geometry("420x180")
-        self.loading_label.destroy()
+        self.loading_frame.pack_forget()
         tk.Misc.rowconfigure(self.login_frame, 0, weight=1)
         tk.Misc.columnconfigure(self.login_frame, 0, weight=1)
         self.login_frame.pack(padx=20, pady=20)
@@ -256,18 +191,22 @@ class ChronoclickerGUI:
         self.login_button.grid(row=2, column=0, columnspan=2)
         self.login_status_label.grid(row=0, column=3, rowspan=2)
 
+        self.login_frame.pack()
+
     def show_main_screen(self):
-        if self.login_frame is not None:
-            self.login_frame.destroy()
+        self.login_frame.pack_forget()
+
         if "cw3" not in self.driver.current_url:
             self.driver.get(self.settings["catwar_url"] + "/cw3/")
             asyncio.run_coroutine_threadsafe(self.run_script(comm_str="info"), self.driver_loop)
 
         self.root.geometry("800x600")
-        self.loading_label.destroy()
+        self.loading_frame.pack_forget()
         tk.Misc.rowconfigure(self.main_frame, 0, weight=1)
         tk.Misc.columnconfigure(self.main_frame, 0, weight=1)
+
         self.main_frame.pack()
+
         self.log_area.grid(column=0, columnspan=5, row=0, rowspan=3, padx=10, pady=10)
         self.comm_entry.grid(column=0, row=4)
         self.timer_label.grid(column=0, row=3, padx=5)
@@ -280,6 +219,40 @@ class ChronoclickerGUI:
         self.root.bind("<Return>", self.ok_button_pressed)
         self.root.bind("<Up>", self.up_button_pressed)
         self.root.bind("<Down>", self.down_button_pressed)
+
+    def show_loading_screen(self):
+        self.loading_frame.pack()
+        self.loading_label.pack(padx=100, pady=100)
+
+    async def test(self, _args=None):
+        my_coords = await self.find_my_coords(verbose=False)
+        my_coords = my_coords[0] - 1, my_coords[1] - 1
+        print(my_coords)
+        solver = minesweeper_utils.MinesweeperSolver(player_position=my_coords, move_to_world=(0, 5))
+        print("solver initiated")
+        for cage in [(0, 0), (0, 1), (0, 2)]:
+            danger_level = await self.driver.check_cage(cage)
+            solver.mark_cage_level(cage, danger_level)
+            await self.wait_for(1, 1.5)
+
+        next_move = (0, 0)
+        while next_move != (-1, -1):
+            next_move = solver.make_move()
+            if next_move == (-1, -1):
+                print("WON???!!!")
+                return
+            danger_level = await self.driver.check_cage(next_move)
+            solver.mark_cage_level(next_move, danger_level)
+            await self.wait_for(1, 1.5)
+
+    async def find_my_coords(self, verbose=True) -> (int, int):
+        my_info = await self.driver.find_cat_on_loc([self.settings["my_id"]])
+        my_coords = my_info[2:]
+        if verbose:
+            current_location = self.driver.get_current_location()
+            self.logger.info(f"Вы находитесь на локации "
+                             f"«{current_location}» на клетке {my_coords[0]}x{my_coords[1]}.")
+        return my_coords
 
     def do_login(self):
         mail = self.mail_entry.get()
@@ -295,9 +268,9 @@ class ChronoclickerGUI:
         time.sleep(seconds)
         if "login" not in self.driver.current_url:
             self.show_main_screen()
-        else:
-            self.login_button.config(text="Войти")
-            self.login_status_label.config(text="Ошибка.\nНеверный логин \nили пароль.")
+            return
+        self.login_button.config(text="Войти")
+        self.login_status_label.config(text="Ошибка.\nНеверный логин \nили пароль.")
 
     def show_password(self):
         if self.password_show_toggle:
@@ -378,7 +351,6 @@ class ChronoclickerGUI:
         self.driver_loop.run_forever()
 
     async def open_browser(self):
-        self.ok_btn["state"] = tk.NORMAL
         if "login" in self.driver.current_url:
             self.show_login_screen()
             return
@@ -571,6 +543,12 @@ class ChronoclickerGUI:
 
     #   ///////////////////////////////////
 
+    async def exit_account(self):
+        self.driver.get(self.settings["catwar_url"])
+        await self.driver.click(xpath="//*[@id='menu_div']/a[9]/div")
+        self.show_login_screen()
+        self.driver.get("https://catwar.net/login")
+
     async def patrol(self, args=None):
         """Команда перехода, маршрут повторяется бесконечно
         (для маршрута из 3 локаций: 1 - 2 - 3 - 2 - 1 - 2 - 3 и так далее). Использование:
@@ -634,7 +612,6 @@ class ChronoclickerGUI:
             if action_active_sec != 1:
                 await self.print_timer(seconds=action_active_sec + self.settings["short_break_duration"][1])
             await self.driver.click(
-                # f"//a[@data-id={self.action_dict[action]}][@class='dey has-tooltip']/img",
                 f"//a[@data-id={self.action_dict[action]}]/img",
                 offset_range=(30, 30))
             seconds = await self.driver.check_time() + random.uniform(
@@ -781,14 +758,15 @@ class ChronoclickerGUI:
         return True
 
     async def text_to_chat(self, message=None) -> bool:
-        """Написать сообщение в чат Игровой"""
+        """Написать сообщение в чат Игровой.
+        Использование: say message"""
 
         if message is None or len(message) != 1:
             self.logger.info("say message")
             return False
         message = message[0]
         await self.driver.type_in_chat(text=message, entry_xpath="//input[@id='text']")
-        await self.driver.click("//*[@id='msg_send']")
+        await self.driver.click(xpath="//*[@id='msg_send']")
         return True
 
     async def wait(self, seconds=None) -> bool:
@@ -813,17 +791,21 @@ class ChronoclickerGUI:
         return True
 
     async def print_inv(self):
+        """ Напечатать инвентарь """
         inv_ids = await self.driver.get_inv_items()
         self.logger.info("Предметы во рту:")
         for i in inv_ids:
             self.logger.info(f"{self.settings['catwar_url']}/cw3/things/{i}.png")
 
     async def do_action_with_cat_handler(self, args=None):
+        """ Совершить действие с другим котом. Использование:
+        do_with имя_кота действие. Возможные действия см. в gamedata.json """
+
         if len(args) != 2:
             self.logger.error("Для выполнения действия с другим игроком нужны аргументы.")
             return
         cat_name, action_name = args
-        await self.driver.do_action_with_cat(cat_name, action_name)
+        await self.driver.do_action_with_cat(cat_name)
         await self.do(args=[action_name])
 
     async def find_items(self, items_to_seek=None):
@@ -890,6 +872,8 @@ class ChronoclickerGUI:
         await self.driver.print_cats()
 
     async def jump_to_cage(self, args=None, verbose=True) -> bool:
+        """ Прыгнуть на клетку row - column """
+
         if not args or len(args) != 2:
             self.logger.info("jump row - column")
             return False
@@ -920,7 +904,7 @@ class ChronoclickerGUI:
         return param_value
 
     async def check_skill(self, args=None) -> int:
-        """ Команда для проверки навыка skill_name. Возвращает fint - значение дроби навыка ('числитель').
+        """ Команда для проверки навыка skill_name. Возвращает int - значение дроби навыка ('числитель').
          skill ун """
 
         if args is None or len(args) != 1:
@@ -978,9 +962,9 @@ class ChronoclickerGUI:
 
         self.driver.get(f"{self.settings['catwar_url']}/chat")
         await self.wait_for(1, 3)
-        await self.driver.click("//a[@data-bind='openPrivateWith_form']")
+        await self.driver.click(xpath="//a[@data-bind='openPrivateWith_form']")
         await self.driver.type_in_chat("Системолап", entry_xpath="//input[@id='openPrivateWith']")
-        await self.driver.click("//*[@id='openPrivateWith_form']/p/input[2]")
+        await self.driver.click(xpath="//*[@id='openPrivateWith_form']/p/input[2]")
 
         games_played = 0
         while games_played != 5:

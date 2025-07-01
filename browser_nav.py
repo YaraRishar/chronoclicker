@@ -1,3 +1,4 @@
+from selenium.common import NoAlertPresentException
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.support.select import Select
 
@@ -168,7 +169,12 @@ class DriverWrapper(WebDriver):
             action_chain.click_and_hold().perform()
             await wait_for(0, 0.05)
             action_chain.release().perform()
-            self.remove_cursor()
+            try:
+                alert = self.switch_to.alert
+                await wait_for(0.5, 1)
+                alert.accept()
+            except NoAlertPresentException:
+                self.remove_cursor()
         except MoveTargetOutOfBoundsException:
             return False
         return True
@@ -340,7 +346,7 @@ class DriverWrapper(WebDriver):
         while not bool(last_message):
             self.refresh()
             await wait_for(0.5)
-            last_message = self.get_last_message()
+            last_message = await self.get_last_message()
 
         return last_message
 
@@ -442,7 +448,7 @@ class DriverWrapper(WebDriver):
         msg_list = chatbox.find_elements(By.XPATH, value="//span/table/tbody/tr/td/span")
         return len(msg_list)
 
-    async def do_action_with_cat(self, cat_name: str, action_name: str):
+    async def do_action_with_cat(self, cat_name: str):
         cat_pos = await self.find_cat_on_loc([cat_name])
         cat_pos = cat_pos[2], cat_pos[3]
         nearest_to_cat = clicker_utils.get_nearest_cages(cat_pos)
@@ -567,6 +573,47 @@ class DriverWrapper(WebDriver):
                 location = await self.get_current_location()
                 return cat_id, location, cage.row, cage.column
         return False, False, False, False
+
+    async def get_last_cw3_message_volume(self) -> int:
+        chatbox = await self.locate_element(xpath="//div[@id='chat_msg']")
+        msg_element = chatbox.find_element(By.XPATH, value="//span/table/tbody/tr/td/span")
+        if not msg_element:
+            self.logger.info("В Игровой нет сообщений.")
+            return -1
+        volume_str = msg_element.get_attribute("class")
+        volume = int("".join([i for i in volume_str if i.isdigit()]))
+        self.logger.info(f"volume {volume}")
+        return volume
+
+    async def check_for_warning(self) -> bool:
+        error_element = await self.locate_element(xpath="//p[id='error']")
+        error_style = error_element.get_attribute("style")
+        has_warning = bool("block" in error_style)
+        self.logger.info("has_warning", has_warning)
+        return has_warning
+
+    async def check_cage(self, cage_to_check: tuple, max_checks=5) -> int | str:
+        cage_to_check = cage_to_check[0] + 1, cage_to_check[1] + 1
+        checks = 0
+        cage_to_check = Cage(self, cage_to_check[0], cage_to_check[1])
+        safe_cage = await self.find_cat_on_loc([self.settings["my_id"]])
+        safe_cage = safe_cage[2:]
+        current_msg_count = await self.count_cw3_messages()
+        danger_level = "?"
+        while checks < max_checks:
+            has_jumped = await cage_to_check.jump()
+            if not has_jumped:
+                break
+            last_msg_count = await self.count_cw3_messages()
+            if last_msg_count > current_msg_count:
+                danger_level = await self.get_last_cw3_message_volume()
+                break
+            await wait_for(0.8, 1.5)
+            safe_cage = Cage(self, safe_cage[0], safe_cage[1])
+            await safe_cage.jump()
+        danger_level = 0 if danger_level == "?" else danger_level
+        self.logger.info(f"danger_level {danger_level}")
+        return danger_level
 
     def get_weight(self):
         pass

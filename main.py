@@ -18,6 +18,7 @@ from selenium.webdriver import Keys
 import cage_utils
 import clicker_utils
 import minesweeper_utils
+import token_handler
 from clicker_utils import get_text
 from browser_nav import DriverWrapper
 
@@ -51,7 +52,11 @@ class ChronoclickerGUI:
 
         self.comm_dict: Dict[str, Union[CallableType, CallableWithParamsType]] = {
             "test": self.test,
+            "save_char": self.save_char,
+            "switch_char": self.switch_char,
+            "clear_char": self.clear_char,
             "exit_char": self.exit_account,
+            "list_char": self.list_chars,
             "do_with": self.do_action_with_cat_handler,
             "aliases": self.print_aliases,
             "patrol": self.patrol,
@@ -546,11 +551,69 @@ class ChronoclickerGUI:
 
     #   ///////////////////////////////////
 
-    async def exit_account(self):
+    async def save_char(self, args=None):
+        """ save_char master_password - char_name - mail - password
+        Если мастер-пароль не установлен и вы сохраняете персонажа в первый раз,
+        то введите любой пароль и запомните его - он понадобится, чтобы перейти на любого из ваших персонажей """
+        if len(args) != 4 or args is None:
+            self.logger.info("save_char master_password - char_name - mail - password")
+            return
+        master_password, char_name, char_mail, char_password = args
+        is_password_correct = token_handler.verify_password(master_password)
+        if not is_password_correct:
+            self.logger.info("Неправильный мастер-пароль!")
+            return
+        path_to_token = token_handler.save_new_creds(char_mail, char_password, char_name)
+        self.logger.info(f"Персонаж сохранён в {path_to_token}! Чтобы переключиться "
+                         f"на этого персонажа, пропишите: switch_char {master_password} - {char_name}")
+
+    async def switch_char(self, args=None):
+        """ switch_char master_password - char_name """
+
+        if len(args) != 2 or args is None:
+            self.logger.info("switch_char master_password - char_name")
+            return
+        master_password, char_name = args
+        is_password_correct = token_handler.verify_password(master_password)
+        if not is_password_correct:
+            self.logger.info("Неправильный мастер-пароль!")
+            return
+        self.logger.info("Пароль верный, заходим на другого персонажа...")
+        mail, password = token_handler.get_creds(char_name)
+
+        await self.exit_account(is_silent=True)
+        await self.driver.login_sequence(mail, password)
+        seconds = self.config["settings"]["max_waiting_time"]
+        await self.wait_for(seconds)
+        self.driver.get(self.settings["catwar_url"] + "/cw3")
+        asyncio.run_coroutine_threadsafe(self.run_script(comm_str="info"), self.driver_loop)
+        self.logger.info("Персонаж успешно сменён!")
+
+    async def exit_account(self, is_silent=False):
         self.driver.get(self.settings["catwar_url"])
         await self.driver.click(xpath="//*[@id='menu_div']/a[9]/div")
-        self.show_login_screen()
+        if not is_silent:
+            self.show_login_screen()
         self.driver.get("https://catwar.net/login")
+
+    async def clear_char(self):
+        """ Команда для удаления всех сохранённых логинов и паролей от
+        ваших аккаунтов, а также сохранённого мастер-пароля """
+        self.logger.info("Эта команда УДАЛИТ все сохранённые через save_char почты и пароли "
+                         "для ВСЕХ ваших персонажей, а также сбросит мастер-пароль! Сами персонажи затронуты "
+                         "не будут, но зайти на них через switch_char будет уже нельзя, "
+                         "все пароли придётся сохранять заново.\n"
+                         "Не выключайте кликер в течение минуты, если действительно хотите продолжить.")
+        await self.wait([30])
+        self.logger.info("Полминуты прошло. Если передумали, выключите кликер!")
+        await self.wait([30])
+        files = token_handler.purge_all_creds()
+        self.logger.info(f"Почты и пароли от персонажей {', '.join(files)} "
+                         f"были удалены, мастер-пароль также был сброшен.")
+
+    async def list_chars(self):
+        chars_str = token_handler.get_token_str()
+        self.logger.info(f"Сохранённые токены: {chars_str}")
 
     async def patrol(self, args=None):
         """Команда перехода, маршрут повторяется бесконечно

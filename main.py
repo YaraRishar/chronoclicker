@@ -46,6 +46,7 @@ class ChronoclickerGUI:
         self.password_show_toggle = True
 
         self.config = clicker_utils.load_json("config.json")
+        self.aliases = clicker_utils.load_json("aliases.json")
 
         CallableType = Callable[[], Union[bool, List[str], Coroutine]]
         CallableWithParamsType = Callable[[List[str]], Union[bool, List[str], Coroutine]]
@@ -115,7 +116,7 @@ class ChronoclickerGUI:
             "skill": self.check_skill,
             "findme": self.find_my_coords,
         }
-        self.settings, self.alias_dict = self.config["settings"], self.config["aliases"]
+        self.settings = self.config["settings"]
         gamedata = clicker_utils.load_json("gamedata.json")
         self.action_dict, self.parameters_dict, self.skills_dict = (
             gamedata["actions"], gamedata["parameters"], gamedata["skills"])
@@ -474,8 +475,8 @@ class ChronoclickerGUI:
         if not multi_comm:
             self.logger.info("Введите команду! Пример: patrol Морозная поляна - Каменная гряда")
             return False
-        if multi_comm in self.alias_dict.keys():
-            await self.multi_comm_handler(self.alias_dict[multi_comm])
+        if multi_comm in self.aliases.keys():
+            await self.multi_comm_handler(self.aliases[multi_comm])
             return True
 
         multi_comm_list: list = multi_comm.split("; ")
@@ -555,6 +556,7 @@ class ChronoclickerGUI:
         """ save_char master_password - char_name - mail - password
         Если мастер-пароль не установлен и вы сохраняете персонажа в первый раз,
         то введите любой пароль и запомните его - он понадобится, чтобы перейти на любого из ваших персонажей """
+        args = [] if args is None else args
         if len(args) != 4 or args is None:
             self.logger.info("save_char master_password - char_name - mail - password")
             return
@@ -570,6 +572,7 @@ class ChronoclickerGUI:
     async def switch_char(self, args=None):
         """ switch_char master_password - char_name """
 
+        args = [] if args is None else args
         if len(args) != 2 or args is None:
             self.logger.info("switch_char master_password - char_name")
             return
@@ -1059,7 +1062,7 @@ class ChronoclickerGUI:
         except ValueError:
             self.logger.info("Ошибка в парсинге аргумента.")
             return False
-        clicker_utils.rewrite_config(self.config)
+        clicker_utils.rewrite_json(json_name="config.json", new_json=self.config)
         self.logger.info("Настройки обновлены!")
         return True
 
@@ -1071,7 +1074,7 @@ class ChronoclickerGUI:
 
     async def print_aliases(self):
         message = ""
-        for alias_name, comm in self.alias_dict.items():
+        for alias_name, comm in self.aliases.items():
             message += f"\t{alias_name}: {comm}\n"
         self.logger.info(message)
 
@@ -1095,9 +1098,10 @@ class ChronoclickerGUI:
             return False
         name = comm.split(" ")[0]
         comm_to_alias = comm.replace(name + " ", "")
-        self.config["aliases"][name] = comm_to_alias
+        self.aliases[name] = comm_to_alias
         self.logger.info(f"Создано сокращение команды {comm_to_alias} под именем {name}.")
-        clicker_utils.rewrite_config(self.config)
+        clicker_utils.rewrite_json(json_name="aliases.json", new_json=self.aliases)
+        partial(self.root.after, 0, self.update_log)()
         return True
 
     async def move_to_location(self,

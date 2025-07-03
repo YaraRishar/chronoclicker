@@ -47,11 +47,11 @@ def load_json(filename: str) -> dict:
         return {}
 
 
-def rewrite_config(new_config: dict):
-    """ Обновить файл настроек config.json при их изменении """
+def rewrite_json(json_name: str, new_json: dict):
+    """ Обновить файл настроек/сокращений при их изменении """
 
-    with open("config.json", "w", encoding="utf-8") as file:
-        file.write(json.dumps(new_config, ensure_ascii=False, indent=4))
+    with open(json_name, "w", encoding="utf-8") as file:
+        file.write(json.dumps(new_json, ensure_ascii=False, indent=4))
 
 
 def crash_handler(exception_type: Exception):

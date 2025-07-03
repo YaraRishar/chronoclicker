@@ -28,7 +28,7 @@ class DriverWrapper(WebDriver):
         self.logger = logger
 
         config = clicker_utils.load_json("config.json")
-        self.settings, self.alias_dict = config["settings"], config["aliases"]
+        self.settings = config["settings"]
         gamedata = clicker_utils.load_json("gamedata.json")
         self.action_dict, self.parameters_dict, self.skills_dict = (
             gamedata["actions"], gamedata["parameters"], gamedata["skills"])

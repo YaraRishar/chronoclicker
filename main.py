@@ -22,6 +22,8 @@ import token_handler
 from clicker_utils import get_text
 from browser_nav import DriverWrapper
 
+CHRONOCLICKER_VERSION = "2.4"
+
 
 class ChronoclickerGUI:
     def __init__(self):
@@ -37,6 +39,7 @@ class ChronoclickerGUI:
                             level=logging.INFO,
                             format=format_log,
                             datefmt="%H:%M:%S")
+        self.logger.info(f"ВЕРСИЯ КЛИКЕРА: {CHRONOCLICKER_VERSION}")
         self.logger.info(f"Создан новый .log файл на пути: {self.logfile_path}")
 
         self.script_task = None
@@ -54,12 +57,19 @@ class ChronoclickerGUI:
         self.comm_dict: Dict[str, Union[CallableType, CallableWithParamsType]] = {
             "test": self.test,
             "save_char": self.save_char,
+            # save_char master_password - char_name - mail - password
             "switch_char": self.switch_char,
+            # switch_char master_password - char_name
             "clear_char": self.clear_char,
+            # clear_char
             "exit_char": self.exit_account,
+            # exit_char
             "list_char": self.list_chars,
+            # list_char
             "do_with": self.do_action_with_cat_handler,
+            # do_with cat_name - action
             "aliases": self.print_aliases,
+            # aliases
             "patrol": self.patrol,
             # patrol  location1 - locationN
             "go": self.go,
@@ -97,8 +107,8 @@ class ChronoclickerGUI:
             "inv": self.print_inv,
             # inv
             "c": self.print_cage_info,
-            "с": self.print_cage_info,  # дубликат команды для с на латинице/кириллице
             # cage row - column
+            "с": self.print_cage_info,  # дубликат команды для с на латинице/кириллице
             "q": self.end_session,
             # q
             "bury": self.bury_handler,
@@ -140,10 +150,10 @@ class ChronoclickerGUI:
         self.main_frame = tk.Frame(self.root)
         self.loading_frame = tk.Frame(self.root)
 
-        self.loading_label = tk.Label(self.loading_frame, text="Загрузка... \n"
-                                                      "Если это сообщение не исчезает, \n"
-                                                      "попробуйте запустить кликер от админа.", font=("Verdana", 18))
-        self.show_loading_screen()
+        self.loading_var = StringVar()
+        self.loading_var.set("Загрузка... \nЕсли это сообщение не исчезает, "
+                             "\nпопробуйте запустить кликер от админа.")
+        self.loading_label = tk.Label(self.loading_frame, textvariable=self.loading_var, font=("Verdana", 18))
         ttk.Style().configure("TButton", relief="flat")
 
         self.mail_entry = tk.Entry(self.login_frame)
@@ -172,11 +182,14 @@ class ChronoclickerGUI:
         self.timer_label = ttk.Label(self.main_frame, textvariable=self.timer, font="Verdana")
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.show_loading_screen()
         partial(self.root.after, 100, self.initialize_driver)()
         self.root.mainloop()
 
     def initialize_driver(self):
+        self.loading_var.set("Начат запуск драйвера...")
         self.driver: DriverWrapper = DriverWrapper(self.logger)
+        self.loading_var.set("Драйвер запущен...")
         asyncio.run_coroutine_threadsafe(self.open_browser(), self.driver_loop)
         asyncio.run_coroutine_threadsafe(self.run_script(comm_str="info"), self.driver_loop)
         partial(self.main_frame.after, 0, self.update_log)()
@@ -556,6 +569,7 @@ class ChronoclickerGUI:
         """ save_char master_password - char_name - mail - password
         Если мастер-пароль не установлен и вы сохраняете персонажа в первый раз,
         то введите любой пароль и запомните его - он понадобится, чтобы перейти на любого из ваших персонажей """
+
         args = [] if args is None else args
         if len(args) != 4 or args is None:
             self.logger.info("save_char master_password - char_name - mail - password")
@@ -602,6 +616,7 @@ class ChronoclickerGUI:
     async def clear_char(self):
         """ Команда для удаления всех сохранённых логинов и паролей от
         ваших аккаунтов, а также сохранённого мастер-пароля """
+
         self.logger.info("Эта команда УДАЛИТ все сохранённые через save_char почты и пароли "
                          "для ВСЕХ ваших персонажей, а также сбросит мастер-пароль! Сами персонажи затронуты "
                          "не будут, но зайти на них через switch_char будет уже нельзя, "

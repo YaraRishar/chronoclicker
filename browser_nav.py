@@ -39,9 +39,8 @@ class DriverWrapper(WebDriver):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         # options.add_argument("--remote-debugging-port=9222")
-        options.add_argument("user-data-dir=selenium")
+        options.add_argument(f"user-data-dir={self.settings['user_data_dir']}")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
-
 
         if self.settings["my_id"] == "1":
             self.logger.info("[!!!] Параметр my_id в файле config.json не заполнен, поиск пути по клеткам "
@@ -89,7 +88,8 @@ class DriverWrapper(WebDriver):
                              "не в фокусе. Чтобы этого избежать, "
                              "пропишите команду settings is_headless - True")
 
-    async def locate_element(self, xpath: str, do_wait=True) -> WebElement | None:
+    async def locate_element(self, xpath: str,
+                             do_wait=True) -> WebElement | None:
         """ Найти элемент на странице по xpath. """
 
         # self.logger.info(f"locating {xpath}")
@@ -232,7 +232,8 @@ class DriverWrapper(WebDriver):
         xpath = f"//div[@class='tooltip-inner' and contains(text(), '{skill_name}')]"
         tooltip_elem = await self.locate_element(xpath=xpath)
         text = tooltip_elem.text if tooltip_elem else ""
-        level_elem = await self.locate_element(f"//div[@id='{skill_name_server}']/div[3]", do_wait=False)
+        level_elem = await self.locate_element(
+            f"//div[@id='{skill_name_server}']/div[3]", do_wait=False)
         if not level_elem:
             return ""
         await self.mouse_over(f"//div[@id='{skill_name_server}']", hover_for=0.01)
@@ -350,7 +351,8 @@ class DriverWrapper(WebDriver):
 
         return last_message
 
-    async def type_in_chat(self, text: str, entry_xpath: str, type_speed_coeff=1.0):
+    async def type_in_chat(self, text: str, entry_xpath: str,
+                           type_speed_coeff=1.0):
         """ Написать сообщение в чат (занимает реалистичное количество времени на набор текста) """
 
         text = [i for i in text]
@@ -541,7 +543,8 @@ class DriverWrapper(WebDriver):
         return inv_ids
 
     async def get_cages_list(self, coords_list=None) -> list[Cage]:
-        """ Получить список элементов всех клеток на поле либо превратить список координат в список клеток """
+        """ Получить список элементов всех клеток на поле либо
+        превратить список координат в список клеток """
 
         if coords_list is None:
             cages_list = [Cage(self, row, column) for column in range(1, 11) for row in range(1, 7)]
@@ -592,7 +595,8 @@ class DriverWrapper(WebDriver):
         self.logger.info("has_warning", has_warning)
         return has_warning
 
-    async def check_cage(self, cage_to_check: tuple, max_checks=5) -> int | str:
+    async def check_cage(self, cage_to_check: tuple,
+                         max_checks=5) -> int | str:
         cage_to_check = cage_to_check[0] + 1, cage_to_check[1] + 1
         checks = 0
         cage_to_check = Cage(self, cage_to_check[0], cage_to_check[1])

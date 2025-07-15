@@ -27,7 +27,7 @@ CHRONOCLICKER_VERSION = "2.4"
 
 class ChronoclickerGUI:
     def __init__(self):
-        self.driver = None
+        self.driver: DriverWrapper | None = None
         now = datetime.datetime.now()
         folders = ["logs", "crashlogs", "resources"]
         for folder in folders:
@@ -56,6 +56,7 @@ class ChronoclickerGUI:
 
         self.comm_dict: Dict[str, Union[CallableType, CallableWithParamsType]] = {
             "test": self.test,
+            "smell": self.smell,
             "save_char": self.save_char,
             # save_char master_password - char_name - mail - password
             "switch_char": self.switch_char,
@@ -98,7 +99,7 @@ class ChronoclickerGUI:
             # cancel
             "jump": self.jump_to_cage,
             # jump row - column
-            "wait": self.wait,
+            "wait": self.wait_verbose,
             # wait seconds_from - seconds_to
             "rabbit_game": self.start_rabbit_game,
             # rabbit_game number_of_games_to_play
@@ -252,7 +253,7 @@ class ChronoclickerGUI:
         for cage in [(0, 0), (0, 1), (0, 2)]:
             danger_level = await self.driver.check_cage(cage)
             solver.mark_cage_level(cage, danger_level)
-            await self.wait_for(1, 1.5)
+            await self.wait_silent(1, 1.5)
 
         next_move = (0, 0)
         while next_move != (-1, -1):
@@ -262,7 +263,7 @@ class ChronoclickerGUI:
                 return
             danger_level = await self.driver.check_cage(next_move)
             solver.mark_cage_level(next_move, danger_level)
-            await self.wait_for(1, 1.5)
+            await self.wait_silent(1, 1.5)
 
     async def find_my_coords(self, verbose=True) -> (int, int):
         my_info = await self.driver.find_cat_on_loc([self.settings["my_id"]])
@@ -301,10 +302,8 @@ class ChronoclickerGUI:
     def ok_button_pressed(self, _event=None):
         asyncio.run_coroutine_threadsafe(self.run_script(), self.driver_loop)
         partial(self.root.after, 0, self.update_log)()
-
         if not self.ensure_status():
-            self.timer.set("Что-то пошло не так. Перезапустите кликер!")
-
+            self.timer.set("Что-то пошло не так. Проверьте соединение с интернетом!")
         self.last_comm_idx = -1
 
     def up_button_pressed(self, _event):
@@ -390,7 +389,7 @@ class ChronoclickerGUI:
             self.comm_entry.delete(0, tk.END)
         self.script_task = asyncio.run_coroutine_threadsafe(self.parse_command(comm_str), self.driver_loop)
 
-    async def wait_for(self, start, end=None, do_random=True):
+    async def wait_silent(self, start, end=None, do_random=True):
         if not do_random:
             await asyncio.sleep(start)
             await self.check_paused(0.01)
@@ -410,7 +409,7 @@ class ChronoclickerGUI:
                 if self.stop_event.is_set() or self.script_task is None:
                     break
                 self.timer.set(f"{console_string}. Осталось {i // 60} мин {i % 60} с.")
-                await self.wait_for(1, do_random=False)
+                await self.wait_silent(1, do_random=False)
             self.timer.set("Действие не выполняется.")
             return
 
@@ -423,7 +422,7 @@ class ChronoclickerGUI:
             console_string = re.sub(r"(\d*) мин", f"{i // 60} мин", message)
             console_string = re.sub(r"(\d*) с", f"{i % 60} с", console_string)
             self.timer.set(console_string)
-            await self.wait_for(1, do_random=False)
+            await self.wait_silent(1, do_random=False)
         self.timer.set("Действие не выполняется.")
 
     async def trigger_long_break(self):
@@ -575,10 +574,19 @@ class ChronoclickerGUI:
             self.logger.info("save_char master_password - char_name - mail - password")
             return
         master_password, char_name, char_mail, char_password = args
+
+        is_password_saved = token_handler.get_stored_master_hash()
+
+        if is_password_saved is None:
+            self.logger.info("Сохраняем новый мастер-пароль...")
+        else:
+            self.logger.info("Проверка мастер-пароля...")
+
         is_password_correct = token_handler.verify_password(master_password)
         if not is_password_correct:
             self.logger.info("Неправильный мастер-пароль!")
             return
+        self.logger.info("Мастер-пароль верифицирован!")
         path_to_token = token_handler.save_new_creds(char_mail, char_password, char_name)
         self.logger.info(f"Персонаж сохранён в {path_to_token}! Чтобы переключиться "
                          f"на этого персонажа, пропишите: switch_char {master_password} - {char_name}")
@@ -601,7 +609,7 @@ class ChronoclickerGUI:
         await self.exit_account(is_silent=True)
         await self.driver.login_sequence(mail, password)
         seconds = self.config["settings"]["max_waiting_time"]
-        await self.wait_for(seconds)
+        await self.wait_silent(seconds)
         self.driver.get(self.settings["catwar_url"] + "/cw3")
         asyncio.run_coroutine_threadsafe(self.run_script(comm_str="info"), self.driver_loop)
         self.logger.info("Персонаж успешно сменён!")
@@ -622,9 +630,9 @@ class ChronoclickerGUI:
                          "не будут, но зайти на них через switch_char будет уже нельзя, "
                          "все пароли придётся сохранять заново.\n"
                          "Не выключайте кликер в течение минуты, если действительно хотите продолжить.")
-        await self.wait([30])
+        await self.wait_verbose([30])
         self.logger.info("Полминуты прошло. Если передумали, выключите кликер!")
-        await self.wait([30])
+        await self.wait_verbose([30])
         files = token_handler.purge_all_creds()
         self.logger.info(f"Почты и пароли от персонажей {', '.join(files)} "
                          f"были удалены, мастер-пароль также был сброшен.")
@@ -667,6 +675,12 @@ class ChronoclickerGUI:
             if not success:
                 continue
         return True
+
+    async def smell(self):
+        seconds_until_action = await self.driver.check_smell_timer()
+        if seconds_until_action != 0:
+            await self.wait_verbose([seconds_until_action, seconds_until_action + random.uniform(1, 10)])
+        await self.do(["принюхаться"], show_availables=False)
 
     async def do(self, args=None, show_availables=True) -> bool:
         """Команда для исполнения последовательности действий 1 раз. Использование:
@@ -853,7 +867,7 @@ class ChronoclickerGUI:
         await self.driver.click(xpath="//*[@id='msg_send']")
         return True
 
-    async def wait(self, seconds=None) -> bool:
+    async def wait_verbose(self, seconds=None) -> bool:
         """ Ничего не делать рандомное количество времени от seconds_start
         до seconds_end секунд либо ровно seconds секунд
          seconds: list = [seconds_start, seconds_end]"""
@@ -1013,7 +1027,7 @@ class ChronoclickerGUI:
         self.driver.get(f"{self.settings['catwar_url']}/rabbit")
         rabbit_balance = get_text(await self.driver.locate_element(
             "//img[@src='img/rabbit.png']/preceding-sibling::b"))
-        await self.wait_for(0.5, 1.5)
+        await self.wait_silent(0.5, 1.5)
         self.driver.back()
         self.logger.info(f"Кролей на счету: {rabbit_balance}")
 
@@ -1045,7 +1059,7 @@ class ChronoclickerGUI:
          rabbit_game"""
 
         self.driver.get(f"{self.settings['catwar_url']}/chat")
-        await self.wait_for(1, 3)
+        await self.wait_silent(1, 3)
         await self.driver.click(xpath="//a[@data-bind='openPrivateWith_form']")
         await self.driver.type_in_chat("Системолап", entry_xpath="//input[@id='openPrivateWith']")
         await self.driver.click(xpath="//*[@id='openPrivateWith_form']/p/input[2]")
@@ -1143,7 +1157,7 @@ class ChronoclickerGUI:
             await self.print_timer(console_string=f"Совершён переход с отменой в локацию {location_name}",
                                    seconds=seconds)
             await self.driver.click(xpath="//a[@id='cancel']")
-            await self.wait_for(1, 3)
+            await self.wait_silent(1, 3)
             return has_moved
         seconds = await self.driver.check_time() + random.uniform(self.settings["short_break_duration"][0],
                                                                   self.settings["short_break_duration"][1])
@@ -1159,12 +1173,12 @@ class ChronoclickerGUI:
     async def bury_item(self, item_img_id: str, level: int):
         await self.driver.click(xpath=f"//div[@class='itemInMouth']/img[@src='things/{item_img_id}.png']",
                                 offset_range=(10, 10))
-        await self.wait_for(0.3, 0.6)
+        await self.wait_silent(0.3, 0.6)
         slider = await self.driver.locate_element(
             "//div[@id='layer']/span[@class='ui-slider-handle ui-state-default ui-corner-all']")
         await self.driver.click(given_element=slider)
         while level != 1:
-            await self.wait_for(0.1, 0.5)
+            await self.wait_silent(0.1, 0.5)
             slider.send_keys(Keys.ARROW_RIGHT)
             level -= 1
         await self.driver.click(xpath="//a[text()='Закопать']")

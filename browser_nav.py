@@ -34,11 +34,13 @@ class DriverWrapper(WebDriver):
             gamedata["actions"], gamedata["parameters"], gamedata["skills"])
 
         options = webdriver.ChromeOptions()
+        options.add_argument("--remote-allow-origins=*")
         options.add_argument("--start-maximized")
-        # options.add_argument("no-sandbox")
+        options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
-        # options.add_argument("--remote-debugging-port=9222")
+        options.add_argument("--remote-debugging-port=9222")
+        options.add_argument("--remote-debugging-pipe")
         options.add_argument(f"user-data-dir={self.settings['user_data_dir']}")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
@@ -588,12 +590,29 @@ class DriverWrapper(WebDriver):
         self.logger.info(f"volume {volume}")
         return volume
 
-    async def check_for_warning(self) -> bool:
-        error_element = await self.locate_element(xpath="//p[id='error']")
-        error_style = error_element.get_attribute("style")
-        has_warning = bool("block" in error_style)
-        self.logger.info("has_warning", has_warning)
-        return has_warning
+    async def get_warning_text(self) -> str:
+        warning_element = await self.locate_element(xpath="//p[@id='error']")
+        warning_style = warning_element.get_attribute("style")
+        has_warning = bool("block" in warning_style)
+        if has_warning:
+            warning_text = get_text(warning_element)
+            return warning_text
+        return ""
+
+    async def check_smell_timer(self) -> int:
+        await self.click(xpath="//div[@id='smell']/div[1]")
+        await wait_for(0.1, 0.2)
+        timer_text = await self.get_warning_text()
+        if "Время прошло" in timer_text:
+            return 0
+        match_seconds = re.search(
+            r"(\d*) мин (\d*) с", timer_text)
+        if not match_seconds:
+            match_seconds = re.search(r"(\d*) с", timer_text)
+            seconds = int(match_seconds[1])
+        else:
+            seconds = int(match_seconds[1]) * 60 + int(match_seconds[2])
+        return seconds
 
     async def check_cage(self, cage_to_check: tuple,
                          max_checks=5) -> int | str:

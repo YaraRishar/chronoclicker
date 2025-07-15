@@ -5,7 +5,7 @@ base = None
 if sys.platform == "win32":
     base = "Win32GUI"
 
-executables = [Executable("main.py", icon="icon.png", target_name="chronoclicker", base=base)]
+executables = [Executable("main.py", icon="icon.ico", target_name="chronoclicker", base=base)]
 files = ["config.json", "gamedata.json", "README.md", ["resources/", "resources"]]
 
 setup(name="Chronoclicker",

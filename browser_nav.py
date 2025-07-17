@@ -94,21 +94,18 @@ class DriverWrapper(WebDriver):
                              do_wait=True) -> WebElement | None:
         """ Найти элемент на странице по xpath. """
 
-        # self.logger.info(f"locating {xpath}")
         try:
             if not do_wait:
                 self.implicitly_wait(0)
             element = self.find_element(By.XPATH, xpath)
             if not do_wait:
                 self.implicitly_wait(self.settings["max_waiting_time"])
-            # self.logger.info(f"!found {xpath}")
             return element
         except NoSuchElementException:
             if self.is_cw3_disabled():
                 self.refresh()
                 await self.locate_element(xpath)
             else:
-                # self.logger.info(f"not found {xpath}")
                 return None
 
     async def locate_elements(self, xpath: str,

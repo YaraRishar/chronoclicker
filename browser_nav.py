@@ -67,10 +67,9 @@ class DriverWrapper(WebDriver):
             self.logger.info("Вебдрайвер не запустился.")
 
         self.logger.info(f"Версия Chrome: {self.capabilities['browserVersion']}")
-        self.command_executor.set_timeout(1000)
+        self.set_page_load_timeout(1000)
 
         stealth(self,
-                languages=["en-US", "en"],
                 vendor="Google Inc.",
                 platform="Win32",
                 webgl_vendor="Intel Inc.",
@@ -241,7 +240,7 @@ class DriverWrapper(WebDriver):
         await self.mouse_over(f"//div[@id='{skill_name_server}']", hover_for=0.01)
         return text + ", уровень " + get_text(level_elem)
 
-    async def get_last_cw3_message(self) -> tuple:
+    async def get_last_cw3_message(self) -> tuple[str, str]:
         """ Получить последнее сообщение в чате Игровой и имя написавшего """
 
         try:
@@ -303,7 +302,7 @@ class DriverWrapper(WebDriver):
 
         await self.click(login_xpath)
 
-    async def get_available_actions(self, action_dict) -> list:
+    async def get_available_actions(self, action_dict) -> list[str]:
         """ Получить список доступных в данный момент действий """
 
         elements = await self.locate_elements("//div/a[@class='dey has-tooltip']")
@@ -320,7 +319,7 @@ class DriverWrapper(WebDriver):
             return ["нет"]
         return actions_list
 
-    async def get_available_locations(self) -> list:
+    async def get_available_locations(self) -> list[str]:
         """ Получить список переходов на локации """
 
         elements = await self.locate_elements(xpath="//span[@class='move_name']")
@@ -492,7 +491,7 @@ class DriverWrapper(WebDriver):
         result = await self.click(xpath="//a[@id='cancel']")
         return not result
 
-    async def get_hist_list(self) -> list:
+    async def get_hist_list(self) -> list[str]:
         hist = await self.locate_element("//span[@id='ist']")
         hist_list = hist.text.split(".")[:-1]
         return hist_list

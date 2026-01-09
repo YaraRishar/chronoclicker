@@ -138,9 +138,9 @@ class ChronoclickerGUI:
         self.driver_loop = asyncio.new_event_loop()
         Thread(target=self.start_driver_loop, daemon=True).start()
 
-        if os.name == "nt":
-            from ctypes import windll
-            windll.shcore.SetProcessDpiAwareness(1)
+        # if os.name == "nt":
+        #     from ctypes import windll
+        #     windll.shcore.SetProcessDpiAwareness(1)
 
         self.root = tk.Tk()
         self.root.geometry("800x600")
@@ -166,7 +166,7 @@ class ChronoclickerGUI:
 
         self.log_area = scrolledtext.ScrolledText(self.main_frame)
         self.comm_entry = ttk.Entry(self.main_frame, width=50, font="Verdana")
-        self.log_area.config(wrap=tk.WORD, state="disabled", font="Verdana")
+        self.log_area.config(wrap="word", state="disabled", font="Verdana")
         self.ok_btn = ttk.Button(self.main_frame, text="OK", width=5,
                                  command=self.ok_button_pressed)
         self.pause_btn = ttk.Button(self.main_frame, text=u"\u23F8", width=5,
@@ -265,7 +265,7 @@ class ChronoclickerGUI:
             solver.mark_cage_level(next_move, danger_level)
             await self.wait_silent(1, 1.5)
 
-    async def find_my_coords(self, verbose=True) -> (int, int):
+    async def find_my_coords(self, verbose=True) -> tuple[int, int]:
         my_info = await self.driver.find_cat_on_loc([self.settings["my_id"]])
         my_coords = my_info[2:]
         if verbose:
@@ -501,6 +501,7 @@ class ChronoclickerGUI:
             return await self.loop_handler(multi_comm)
         for comm in multi_comm_list:
             await self.comm_handler(comm)
+        return None
 
     async def comm_handler(self, comm: str) -> float | int | bool:
         """ Разделить ключевое слово команды и аргументы """
@@ -947,6 +948,7 @@ class ChronoclickerGUI:
             available_locations = await self.driver.get_available_locations()
             random_location = random.sample(available_locations, 1)
             await self.go(random_location)
+        return None
 
     async def pathfind_handler(self, end: tuple, forbidden_cages_given=()):
         """ Найти путь по клеткам от вашего местоположения до end. Использование:
@@ -1171,7 +1173,7 @@ class ChronoclickerGUI:
 
         return has_moved
 
-    async def bury_item(self, item_img_id: str, level: int):
+    async def bury_item(self, item_img_id: int, level: int):
         await self.driver.click(xpath=f"//div[@class='itemInMouth']/img[@src='things/{item_img_id}.png']",
                                 offset_range=(10, 10))
         await self.wait_silent(0.3, 0.6)

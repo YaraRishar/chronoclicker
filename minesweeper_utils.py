@@ -58,7 +58,7 @@ class MinesweeperSolver:
         return tuple((i, j) for i in range(self.height)
                      for j in range(self.width) if self.board[i][j] in ("x", "?"))
 
-    def make_move(self) -> (int, int):
+    def make_move(self) -> tuple[int, int]:
         forbidden_cages = self.get_unsafe_cages()
         path = pathfind(self.player_position, self.move_to_world, forbidden_cages)
         if path:

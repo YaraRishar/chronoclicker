@@ -10,14 +10,14 @@ class Cage:
             self.driver.logger.info("Неверные координаты клетки!")
             return
 
-        self.items: [str] = ()
+        self.items: list[str] = []
         self.has_move: bool = False
         self.move_name: str = ""
         self.cat_name: str = ""
         self.cat_id: str = ""
         self.cat_rank: str = ""
         self.cat_smell: int = -1
-        self.cat_items: [str] = ()
+        self.cat_items: list[str] = []
         self.cat_status: str = ""
         self.cat_color_url: str = ""
         self.cat_size: int = -1
@@ -161,7 +161,7 @@ class Cage:
             self.driver.logger.info(f"Клетка {self.row}x{self.column} занята котом по имени {self.cat_name}!")
             return False
         if self.is_move():
-            self.move_name = self.get_move_name()
+            self.move_name = await self.get_move_name()
             self.driver.logger.info(f"Клетка {self.row}x{self.column} занята переходом на локацию {self.move_name}!")
             return False
         await wait_for(0.3, 1)

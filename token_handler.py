@@ -80,7 +80,7 @@ def save_new_creds(mail: str, password: str, filename) -> str:
     return str(path_to_token.absolute())
 
 
-def get_creds(filename: str) -> (str, str):
+def get_creds(filename: str) -> tuple[str, str]:
     true_hash = get_stored_master_hash()
     path_to_storage = pathlib.Path("character_tokens")
     path_to_token = path_to_storage.joinpath(f"{filename}.txt")

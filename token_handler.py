@@ -68,9 +68,11 @@ def get_stored_master_hash() -> bytes | None:
 def save_new_creds(mail: str, password: str, filename) -> str:
     true_hash = get_stored_master_hash()
     fernet_key = get_fernet_key(true_hash)
+
     path_to_storage = pathlib.Path("character_tokens")
     filename = f"{filename}.txt"
     path_to_token = path_to_storage.joinpath(filename)
+
     encrypted_password = fernet_key.encrypt(password.encode("utf-8"))
     encrypted_mail = fernet_key.encrypt(mail.encode("utf-8"))
     with open(path_to_token, "bw") as file:

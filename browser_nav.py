@@ -34,13 +34,13 @@ class DriverWrapper(WebDriver):
             gamedata["actions"], gamedata["parameters"], gamedata["skills"])
 
         options = webdriver.ChromeOptions()
-        options.add_argument("--remote-allow-origins=*")
+        # options.add_argument("--remote-allow-origins=*")
         options.add_argument("--start-maximized")
-        options.add_argument("--no-sandbox")
+        options.add_argument("no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--remote-debugging-port=9222")
-        options.add_argument("--remote-debugging-pipe")
+        # options.add_argument("--remote-debugging-pipe")
         options.add_argument(f"user-data-dir={self.settings['user_data_dir']}")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
@@ -63,6 +63,9 @@ class DriverWrapper(WebDriver):
         else:
             super().__init__(options=options)
             self.logger.info("Вебдрайвер запущен... ")
+        if not self.service.is_connectable():
+            self.logger.info("Вебдрайвер не запустился.")
+
         self.logger.info(f"Версия Chrome: {self.capabilities['browserVersion']}")
         self.command_executor.set_timeout(1000)
 

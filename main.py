@@ -7,10 +7,10 @@ import random
 import re
 import threading
 import time
-import tkinter as tk
 from typing import Union, Callable, Dict, List, Coroutine
 from functools import partial
 from threading import Thread
+import tkinter as tk
 from tkinter import ttk, scrolledtext, StringVar
 
 from selenium.webdriver import Keys
@@ -284,7 +284,7 @@ class ChronoclickerGUI:
 
     def run_login_sequence(self, mail, password):
         asyncio.run(self.driver.login_sequence(mail, password))
-        seconds = self.config["settings"]["max_waiting_time"]
+        seconds = self.config["max_waiting_time"]
         time.sleep(seconds)
         if "login" not in self.driver.current_url:
             self.show_main_screen()
@@ -567,7 +567,8 @@ class ChronoclickerGUI:
     async def save_char(self, args=None):
         """ save_char master_password - char_name - mail - password
         Если мастер-пароль не установлен и вы сохраняете персонажа в первый раз,
-        то введите любой пароль и запомните его - он понадобится, чтобы перейти на любого из ваших персонажей """
+        то введите любой пароль и запомните его -
+        он понадобится, чтобы перейти на любого из ваших персонажей """
 
         args = [] if args is None else args
         if len(args) != 4 or args is None:

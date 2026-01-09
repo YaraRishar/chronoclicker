@@ -10,7 +10,7 @@
             10
         ],
         "critical_sleep_pixels": 40,
-        "is_headless": true,
+        "is_headless": false,
         "driver_path": "",
         "user_data_dir": "selenium",
         "max_waiting_time": 3,

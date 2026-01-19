@@ -9,8 +9,8 @@ executables = [Executable("main.py", icon="icon.ico", target_name="chronoclicker
 files = ["config.json", "aliases.json", "gamedata.json", "README.md", ["resources/", "resources"]]
 
 setup(name="Chronoclicker",
-      version="2.4",
-      description="Selenium-based CatWar autoclicker",
+      version="3.0",
+      description="Playwright-based CatWar autoclicker",
       executables=executables,
       options={
             "build_exe": {

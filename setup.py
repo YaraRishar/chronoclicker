@@ -3,7 +3,7 @@ from cx_Freeze import setup, Executable
 
 base = None
 if sys.platform == "win32":
-    base = "Win32GUI"
+    base = "gui"
 
 executables = [Executable("main.py", icon="icon.ico", target_name="chronoclicker", base=base)]
 files = ["config.json", "aliases.json", "gamedata.json", "README.md", ["resources/", "resources"]]

@@ -1,0 +1,11 @@
+[project]
+name = "chronoclicker"
+version = "0.3.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "chardet>=5.2.0",
+    "pip~=25.3",
+    "playwright==1.57.0",
+    "urllib3~=2.6.3",
+]

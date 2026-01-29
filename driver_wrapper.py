@@ -32,9 +32,9 @@ class DriverWrapper:
         p = await async_playwright().start()
         args = ["--start-maximized"]
         self.driver = await p.firefox.launch_persistent_context(
-            headless=False,
+            headless=self.settings["is_headless"],
             args=args,
-            user_data_dir="playwright",
+            user_data_dir=self.settings["user_data_dir"],
             no_viewport=True,
             is_mobile=False,
             has_touch=False

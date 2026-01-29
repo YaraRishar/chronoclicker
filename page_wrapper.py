@@ -52,7 +52,9 @@ class PageWrapper:
         except AssertionError:
             return None
 
-    async def locate_elements(self, xpath: str, timeout: float | int = 2):
+    async def locate_elements(self,
+                              xpath: str,
+                              timeout: float | int = 2):
         elements = await self._page.locator(f"xpath={xpath}").all()
         for element in elements:
             try:
@@ -70,7 +72,9 @@ class PageWrapper:
             '"plugins",'
             '{get() {return [' + plugins_array + ']}})')
 
-    async def click_element(self, xpath: str, random_offset=(0, 0), timeout=1) -> bool:
+    async def click_element(self,
+                            xpath: str,
+                            random_offset=(0, 0), timeout=1) -> bool:
         element = await self.locate_element(xpath, timeout)
         if element is None:
             return False

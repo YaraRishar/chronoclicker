@@ -1,21 +1,10 @@
 @echo off
 SETLOCAL
 
-setlocal EnableDelayedExpansion
-
-for /f "tokens=2" %%a in ('chcp') do set "OLDCP=%%a"
-chcp 65001 >nul 2>&1
-if errorlevel 1 (
-    chcp 1251 >nul 2>&1
-)
-
-:echo_cyr
-powershell -Command "& {[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); [Console]::WriteLine('%~1')}" 2>nul
-exit /b
-
 set "CLICKER_PATH=C:\Users\%USERNAME%\Downloads"
 
-call :echo_cyr "Куда установить кликер? Нажмите Enter, если вы хотите установить в C:\Users\%USERNAME%\Downloads, либо введите другой путь: "
+ECHO "Kirillica ne rabotaet, no vy derzhites("
+ECHO "Kuda ustanovit kliker? Nazhmite Enter, esli vy hotite ustanovit v C:\Users\%USERNAME%\Downloads, libo vvedite drugoj put: "
 SET /P CLICKER_PATH=""
 
 SET "INSTALLER=%TEMP%\python-3.13.2-amd64.exe"
@@ -24,13 +13,13 @@ SET /P SEPVAR=<%TEMP%\sep.txt
 
 %LOCALAPPDATA%\Programs\Python\Python313\python.exe --version >NUL 2>&1
 IF %ERRORLEVEL% EQU 0 (
-    call :echo_cyr "Python уже установлен, теперь устанавливаем кликер..."
+    ECHO "Python uzhe ustanovlen, teper ustanavlivaem kliker..."
     SET "PYTHON_PATH=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
 ) ELSE (
     powershell -Command "Invoke-WebRequest -Uri https://www.python.org/ftp/python/3.13.2/python-3.13.2-amd64.exe -OutFile %INSTALLER% | Out-File -Encoding ASCII %TEMP%\pydl.txt"
     SET /P PYDLVAR=<%TEMP%\pydl.txt
     IF NOT EXIST %INSTALLER% (
-        call :echo_cyr "Не удалось скачать установщик. Проверьте, есть ли у вас интернет. В крайнем случае, скачайте и установите Python с занесением в PATH самостоятельно отсюда: https://www.python.org/ftp/python/3.13.2/python-3.13.2-amd64.exe"
+        ECHO "Ne udalos skachat ustanovshik. Proverte, est li u vas internet. V krajnem sluchae, skachajte i ustanovite Python s zaneseniem v PATH samostoyatelno otsyuda: https://www.python.org/ftp/python/3.13.2/python-3.13.2-amd64.exe"
         PAUSE
         EXIT /B 1
     )
@@ -39,7 +28,7 @@ IF %ERRORLEVEL% EQU 0 (
     IF EXIST "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
         SET "PYTHON_PATH=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
     ) ELSE (
-        call :echo_cyr "Не удалось скачать установщик. Проверьте, есть ли у вас интернет. В крайнем случае, скачайте и установите Python с занесением в PATH самостоятельно отсюда: https://www.python.org/ftp/python/3.13.2/python-3.13.2-amd64.exe"
+        ECHO "Ne udalos skachat ustanovshik. Proverte, est li u vas internet. V krajnem sluchae, skachajte i ustanovite Python s zaneseniem v PATH samostoyatelno otsyuda: https://www.python.org/ftp/python/3.13.2/python-3.13.2-amd64.exe"
         PAUSE
         EXIT /B 1
     )
@@ -49,24 +38,24 @@ IF %ERRORLEVEL% EQU 0 (
 
 powershell -Command "Invoke-WebRequest -Uri https://github.com/YaraRishar/chronoclicker/archive/refs/heads/main.zip -OutFile %TEMP%\chronoclicker-main.zip"
 IF EXIST "%TEMP%\chronoclicker-main.zip" (
-    call :echo_cyr "Кликер скачан с https://github.com/YaraRishar/chronoclicker"
+    ECHO "Kliker skachan s https://github.com/YaraRishar/chronoclicker"
 ) ELSE (
-    call :echo_cyr "Не удалось скачать кликер. Проверьте, есть ли у вас интернет. В крайнем случае, скачайте кликер самостоятельно и положите архив в %TEMP%, кликер находится по ссылке: https://github.com/YaraRishar/chronoclicker/archive/refs/heads/main.zip"
+    ECHO "Ne udalos skachat kliker. Proverte, est li u vas internet. V krajnem sluchae, skachajte kliker samostoyatelno i polozhite arhiv v %TEMP%, kliker nahoditsya po ssylke: https://github.com/YaraRishar/chronoclicker/archive/refs/heads/main.zip"
     PAUSE
     EXIT /B 1
 )
 
 powershell Expand-Archive %TEMP%\chronoclicker-main.zip -DestinationPath %CLICKER_PATH%
-call :echo_cyr "Кликер разархивирован в %CLICKER_PATH%..."
+ECHO "Kliker razarhivirovan v %CLICKER_PATH%..."
 cd %CLICKER_PATH%
 REN chronoclicker-main chronoclicker
 cd chronoclicker
 python -m venv .venv
-call :echo_cyr "Создано окружение Python (.venv) в %CLICKER_PATH%\chronoclicker"
+ECHO "Sozdano okruzhenie Python (.venv) v %CLICKER_PATH%\chronoclicker"
 call .venv\Scripts\activate.bat
-call :echo_cyr "Окружение Python (.venv) активировано..."
+ECHO "Okruzhenie Python (.venv) aktivirovano..."
 call python -m pip install -r requirements.txt
-call :echo_cyr "Кликер успешно установлен! Чтобы его запустить, перейдите в %CLICKER_PATH%\chronoclicker и запустите chronoclicker.bat"
-call :echo_cyr "Наш чат в ТГ: https://t.me/+EEOrtd6QvVIzNWZi (ну или наберите в поиске: chronoclicker | чит для catwar)"
-call :echo_cyr "Гайд по командам и ответы на часто задаваемые вопросы: https://github.com/YaraRishar/chronoclicker?tab=readme-ov-file#chronoclicker"
+ECHO "Kliker uspeshno ustanovlen! Chtoby ego zapustit, perejdite v %CLICKER_PATH%\chronoclicker i zapustite chronoclicker.bat"
+ECHO "Nash chat v TG: https://t.me/+EEOrtd6QvVIzNWZi (nu ili naberite v poiske: chronoclicker | chit dlya catwar)"
+ECHO "Gajd po komandam i otvety na chasto zadavaemye voprosy: https://github.com/YaraRishar/chronoclicker?tab=readme-ov-file#chronoclicker"
 PAUSE

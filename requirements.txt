@@ -2,5 +2,5 @@ selenium>=4.0.0
 selenium-stealth==1.0.6
 urllib3>=2.5.0
 chardet~=5.2.0
-cx_Freeze~=8.1.0
-cryptography~=45.0.4
+cx_Freeze~=8.5.3
+cryptography~=46.0.5

@@ -1,0 +1,13 @@
+[project]
+name = "chronoclicker"
+version = "2.4.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "selenium>=4.0.0",
+    "selenium-stealth==1.0.6",
+    "urllib3>=2.5.0",
+    "chardet~=5.2.0",
+    "cx-freeze~=8.5.3",
+    "cryptography~=46.0.5",
+]

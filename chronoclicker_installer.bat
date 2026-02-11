@@ -31,6 +31,6 @@ cd C:\Users\%USERNAME%\Downloads
 REN chronoclicker-main chronoclicker
 cd chronoclicker
 python -m venv .venv
-.venv\Scripts\activate.bat
-pip install -r requirements.txt
+call .venv\Scripts\activate.bat
+call pip install -r requirements.txt
 python main.py

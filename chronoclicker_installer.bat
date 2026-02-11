@@ -32,5 +32,5 @@ REN chronoclicker-main chronoclicker
 cd chronoclicker
 python -m venv .venv
 call .venv\Scripts\activate.bat
-call pip install -r requirements.txt
+call python -m pip install -r requirements.txt
 python main.py

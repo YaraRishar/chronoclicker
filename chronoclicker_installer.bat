@@ -1,8 +1,11 @@
-юя@echo off
+@echo off
 SETLOCAL
 
+setlocal EnableDelayedExpansion
+PowerShell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8"
+
 set "CLICKER_PATH=C:\Users\%USERNAME%\Downloads"
-SET /P CLICKER_PATH="РљСѓРґР° СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РєР»РёРєРµСЂ? РќР°Р¶РјРёС‚Рµ Enter, РµСЃР»Рё РІС‹ С…РѕС‚РёС‚Рµ СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РІ C:\Users\%USERNAME%\Downloads, Р»РёР±Рѕ РІРІРµРґРёС‚Рµ РґСЂСѓРіРѕР№ РїСѓС‚СЊ: "
+SET /P CLICKER_PATH="Куда установить кликер? Нажмите Enter, если вы хотите установить в C:\Users\%USERNAME%\Downloads, либо введите другой путь: "
 
 SET "INSTALLER=%TEMP%\python-3.13.2-amd64.exe"
 powershell -Command "Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; Get-ExecutionPolicy | Out-File -Encoding ASCII %TEMP%\sep.txt"
@@ -10,13 +13,13 @@ SET /P SEPVAR=<%TEMP%\sep.txt
 
 %LOCALAPPDATA%\Programs\Python\Python313\python.exe --version >NUL 2>&1
 IF %ERRORLEVEL% EQU 0 (
-    ECHO "Python СѓР¶Рµ СѓСЃС‚Р°РЅРѕРІР»РµРЅ, С‚РµРїРµСЂСЊ СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј РєР»РёРєРµСЂ..."
+    ECHO "Python уже установлен, теперь устанавливаем кликер..."
     SET "PYTHON_PATH=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
 ) ELSE (
     powershell -Command "Invoke-WebRequest -Uri https://www.python.org/ftp/python/3.13.2/python-3.13.2-amd64.exe -OutFile %INSTALLER% | Out-File -Encoding ASCII %TEMP%\pydl.txt"
     SET /P PYDLVAR=<%TEMP%\pydl.txt
     IF NOT EXIST %INSTALLER% (
-        ECHO "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ СѓСЃС‚Р°РЅРѕРІС‰РёРє. РџСЂРѕРІРµСЂСЊС‚Рµ, РµСЃС‚СЊ Р»Рё Сѓ РІР°СЃ РёРЅС‚РµСЂРЅРµС‚. Р’ РєСЂР°Р№РЅРµРј СЃР»СѓС‡Р°Рµ, СЃРєР°С‡Р°Р№С‚Рµ Рё СѓСЃС‚Р°РЅРѕРІРёС‚Рµ Python СЃ Р·Р°РЅРµСЃРµРЅРёРµРј РІ PATH СЃР°РјРѕСЃС‚РѕСЏС‚РµР»СЊРЅРѕ РѕС‚СЃСЋРґР°: https://www.python.org/ftp/python/3.13.2/python-3.13.2-amd64.exe"
+        ECHO "Не удалось скачать установщик. Проверьте, есть ли у вас интернет. В крайнем случае, скачайте и установите Python с занесением в PATH самостоятельно отсюда: https://www.python.org/ftp/python/3.13.2/python-3.13.2-amd64.exe"
         PAUSE
         EXIT /B 1
     )
@@ -25,7 +28,7 @@ IF %ERRORLEVEL% EQU 0 (
     IF EXIST "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
         SET "PYTHON_PATH=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
     ) ELSE (
-        ECHO "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ СѓСЃС‚Р°РЅРѕРІС‰РёРє. РџСЂРѕРІРµСЂСЊС‚Рµ, РµСЃС‚СЊ Р»Рё Сѓ РІР°СЃ РёРЅС‚РµСЂРЅРµС‚. Р’ РєСЂР°Р№РЅРµРј СЃР»СѓС‡Р°Рµ, СЃРєР°С‡Р°Р№С‚Рµ Рё СѓСЃС‚Р°РЅРѕРІРёС‚Рµ Python СЃ Р·Р°РЅРµСЃРµРЅРёРµРј РІ PATH СЃР°РјРѕСЃС‚РѕСЏС‚РµР»СЊРЅРѕ РѕС‚СЃСЋРґР°: https://www.python.org/ftp/python/3.13.2/python-3.13.2-amd64.exe"
+        ECHO "Не удалось скачать установщик. Проверьте, есть ли у вас интернет. В крайнем случае, скачайте и установите Python с занесением в PATH самостоятельно отсюда: https://www.python.org/ftp/python/3.13.2/python-3.13.2-amd64.exe"
         PAUSE
         EXIT /B 1
     )
@@ -35,24 +38,24 @@ IF %ERRORLEVEL% EQU 0 (
 
 powershell -Command "Invoke-WebRequest -Uri https://github.com/YaraRishar/chronoclicker/archive/refs/heads/main.zip -OutFile %TEMP%\chronoclicker-main.zip"
 IF EXIST "%TEMP%\chronoclicker-main.zip" (
-    ECHO "РљР»РёРєРµСЂ СЃРєР°С‡Р°РЅ СЃ https://github.com/YaraRishar/chronoclicker"
+    ECHO "Кликер скачан с https://github.com/YaraRishar/chronoclicker"
 ) ELSE (
-    ECHO "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ РєР»РёРєРµСЂ. РџСЂРѕРІРµСЂСЊС‚Рµ, РµСЃС‚СЊ Р»Рё Сѓ РІР°СЃ РёРЅС‚РµСЂРЅРµС‚. Р’ РєСЂР°Р№РЅРµРј СЃР»СѓС‡Р°Рµ, СЃРєР°С‡Р°Р№С‚Рµ РєР»РёРєРµСЂ СЃР°РјРѕСЃС‚РѕСЏС‚РµР»СЊРЅРѕ Рё РїРѕР»РѕР¶РёС‚Рµ Р°СЂС…РёРІ РІ %TEMP%, РєР»РёРєРµСЂ РЅР°С…РѕРґРёС‚СЃСЏ РїРѕ СЃСЃС‹Р»РєРµ: https://github.com/YaraRishar/chronoclicker/archive/refs/heads/main.zip"
+    ECHO "Не удалось скачать кликер. Проверьте, есть ли у вас интернет. В крайнем случае, скачайте кликер самостоятельно и положите архив в %TEMP%, кликер находится по ссылке: https://github.com/YaraRishar/chronoclicker/archive/refs/heads/main.zip"
     PAUSE
     EXIT /B 1
 )
 
 powershell Expand-Archive %TEMP%\chronoclicker-main.zip -DestinationPath %CLICKER_PATH%
-ECHO "РљР»РёРєРµСЂ СЂР°Р·Р°СЂС…РёРІРёСЂРѕРІР°РЅ РІ %CLICKER_PATH%..."
+ECHO "Кликер разархивирован в %CLICKER_PATH%..."
 cd %CLICKER_PATH%
 REN chronoclicker-main chronoclicker
 cd chronoclicker
 python -m venv .venv
-ECHO "РЎРѕР·РґР°РЅРѕ РѕРєСЂСѓР¶РµРЅРёРµ Python (.venv) РІ %CLICKER_PATH%\chronoclicker"
+ECHO "Создано окружение Python (.venv) в %CLICKER_PATH%\chronoclicker"
 call .venv\Scripts\activate.bat
-ECHO "РћРєСЂСѓР¶РµРЅРёРµ Python (.venv) Р°РєС‚РёРІРёСЂРѕРІР°РЅРѕ..."
+ECHO "Окружение Python (.venv) активировано..."
 call python -m pip install -r requirements.txt
-ECHO "РљР»РёРєРµСЂ СѓСЃРїРµС€РЅРѕ СѓСЃС‚Р°РЅРѕРІР»РµРЅ! Р§С‚РѕР±С‹ РµРіРѕ Р·Р°РїСѓСЃС‚РёС‚СЊ, РїРµСЂРµР№РґРёС‚Рµ РІ %CLICKER_PATH%\chronoclicker Рё Р·Р°РїСѓСЃС‚РёС‚Рµ chronoclicker.bat"
-ECHO "РќР°С€ С‡Р°С‚ РІ РўР“: https://t.me/+EEOrtd6QvVIzNWZi (РЅСѓ РёР»Рё РЅР°Р±РµСЂРёС‚Рµ РІ РїРѕРёСЃРєРµ: chronoclicker | С‡РёС‚ РґР»СЏ catwar)"
-ECHO "Р“Р°Р№Рґ РїРѕ РєРѕРјР°РЅРґР°Рј Рё РѕС‚РІРµС‚С‹ РЅР° С‡Р°СЃС‚Рѕ Р·Р°РґР°РІР°РµРјС‹Рµ РІРѕРїСЂРѕСЃС‹: https://github.com/YaraRishar/chronoclicker?tab=readme-ov-file#chronoclicker"
-PAUSяэ
+ECHO "Кликер успешно установлен! Чтобы его запустить, перейдите в %CLICKER_PATH%\chronoclicker и запустите chronoclicker.bat"
+ECHO "Наш чат в ТГ: https://t.me/+EEOrtd6QvVIzNWZi (ну или наберите в поиске: chronoclicker | чит для catwar)"
+ECHO "Гайд по командам и ответы на часто задаваемые вопросы: https://github.com/YaraRishar/chronoclicker?tab=readme-ov-file#chronoclicker"
+PAUSE

@@ -1,4 +1,4 @@
-@echo off
+��@echo off
 SETLOCAL
 
 set "CLICKER_PATH=C:\Users\%USERNAME%\Downloads"
@@ -55,4 +55,4 @@ call python -m pip install -r requirements.txt
 ECHO "Кликер успешно установлен! Чтобы его запустить, перейдите в %CLICKER_PATH%\chronoclicker и запустите chronoclicker.bat"
 ECHO "Наш чат в ТГ: https://t.me/+EEOrtd6QvVIzNWZi (ну или наберите в поиске: chronoclicker | чит для catwar)"
 ECHO "Гайд по командам и ответы на часто задаваемые вопросы: https://github.com/YaraRishar/chronoclicker?tab=readme-ov-file#chronoclicker"
-PAUSE
+PAUS��

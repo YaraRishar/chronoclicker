@@ -203,6 +203,7 @@ class ChronoclickerGUI:
         tk.Misc.rowconfigure(self.login_frame, 0, weight=1)
         tk.Misc.columnconfigure(self.login_frame, 0, weight=1)
         self.login_frame.pack(padx=20, pady=20)
+        self.root.lift()
         tk.Label(self.login_frame, text="Почта:").grid(row=0, column=0)
         tk.Label(self.login_frame, text="Пароль:").grid(row=1, column=0)
         self.mail_entry.grid(row=0, column=1)
@@ -226,6 +227,7 @@ class ChronoclickerGUI:
         tk.Misc.columnconfigure(self.main_frame, 0, weight=1)
 
         self.main_frame.pack()
+        self.root.lift()
 
         self.log_area.grid(column=0, columnspan=5, row=0, rowspan=3, padx=10, pady=10)
         self.comm_entry.grid(column=0, row=4)
@@ -436,6 +438,8 @@ class ChronoclickerGUI:
 
     async def check_paused(self, seconds=0.1):
         partial(self.root.after, 0, self.update_log)()
+        if not self.ensure_status():
+            self.on_close()
         if self.stop_event.is_set():
             self.stop_script()
         while self.pause_event.is_set():
